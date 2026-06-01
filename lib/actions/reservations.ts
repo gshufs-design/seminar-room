@@ -214,7 +214,9 @@ export async function getRoomPassword(
   }
 
   const now = new Date()
-  const reservationStart = new Date(`${reservation.reservation_date}T${reservation.start_time}`)
+  // start_time은 KST 기준이므로 +09:00 명시 (서버가 UTC여도 KST로 파싱)
+  const startTimeStr = reservation.start_time.substring(0, 8)
+  const reservationStart = new Date(`${reservation.reservation_date}T${startTimeStr}+09:00`)
   const showFrom = new Date(reservationStart.getTime() - 24 * 60 * 60 * 1000)
 
   if (now < showFrom) {

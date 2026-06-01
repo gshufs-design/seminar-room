@@ -79,14 +79,15 @@ export function generateTimeSlots(reservations: Reservation[]): TimeSlot[] {
 
 export function canReserveTime(reservationDate: string, startHour: number): boolean {
   const now = new Date()
-  const reservationStart = new Date(`${reservationDate}T${String(startHour).padStart(2, '0')}:00:00`)
+  // +09:00 명시로 서버(UTC)/클라이언트(KST) 모두 동일하게 KST로 파싱
+  const reservationStart = new Date(`${reservationDate}T${String(startHour).padStart(2, '0')}:00:00+09:00`)
   const minAllowedTime = addHours(now, 24)
   return reservationStart >= minAllowedTime
 }
 
 export function canShowPassword(reservationDate: string, startTime: string): boolean {
   const now = new Date()
-  const reservationStart = new Date(`${reservationDate}T${startTime}`)
+  const reservationStart = new Date(`${reservationDate}T${startTime}+09:00`)
   const showFrom = addHours(reservationStart, -24)
   return now >= showFrom
 }
