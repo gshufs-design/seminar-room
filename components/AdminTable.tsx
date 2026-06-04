@@ -1,13 +1,13 @@
 'use client'
 
 import { useState } from 'react'
-import { updateReservationStatus, updateAdminMemo } from '@/lib/actions/admin'
+import { updateReservationStatus, updateAdminMemo, adminCancelReservation } from '@/lib/actions/admin'
 import Badge from './ui/Badge'
 import Button from './ui/Button'
 import Modal from './ui/Modal'
 import type { Reservation, ReservationStatus } from '@/types'
 import { formatDate, padHour } from '@/lib/utils'
-import { Check, X, FileText, ChevronDown, Search } from 'lucide-react'
+import { Check, X, FileText, Search, Ban } from 'lucide-react'
 
 interface AdminTableProps {
   reservations: Reservation[]
@@ -29,6 +29,10 @@ export default function AdminTable({ reservations, onRefresh }: AdminTableProps)
   const [memoModal, setMemoModal] = useState<{ open: boolean; reservation: Reservation | null }>({ open: false, reservation: null })
   const [memoText, setMemoText] = useState('')
   const [memoLoading, setMemoLoading] = useState(false)
+  const [adminCancelModal, setAdminCancelModal] = useState<{ open: boolean; reservation: Reservation | null }>({ open: false, reservation: null })
+  const [cancelReason, setCancelReason] = useState('')
+  const [cancelLoading, setCancelLoading] = useState(false)
+  const [cancelError, setCancelError] = useState('')
 
   const filtered = reservations.filter((r) => {
     const matchStatus = filter === 'all' || r.status === filter
@@ -51,6 +55,25 @@ export default function AdminTable({ reservations, onRefresh }: AdminTableProps)
     onRefresh()
   }
 
+  const handleAdminCancel = async () => {
+    if (!adminCancelModal.reservation) return
+    if (!cancelReason.trim()) {
+      setCancelError('취소 사유를 입력해 주세요.')
+      return
+    }
+    setCancelLoading(true)
+    setCancelError('')
+    const result = await adminCancelReservation(adminCancelModal.reservation.id, cancelReason)
+    setCancelLoading(false)
+    if (result.success) {
+      setAdminCancelModal({ open: false, reservation: null })
+      setCancelReason('')
+      onRefresh()
+    } else {
+      setCancelError(result.error ?? '처리 중 오류가 발생했습니다.')
+    }
+  }
+
   const handleMemoSave = async () => {
     if (!memoModal.reservation) return
     setMemoLoading(true)
@@ -66,6 +89,7 @@ export default function AdminTable({ reservations, onRefresh }: AdminTableProps)
     { label: '승인', value: 'approved' },
     { label: '거절', value: 'rejected' },
     { label: '취소', value: 'cancelled' },
+    { label: '관리자 취소', value: 'admin_cancelled' },
   ]
 
   return (
@@ -161,6 +185,15 @@ export default function AdminTable({ reservations, onRefresh }: AdminTableProps)
                             </button>
                           </>
                         )}
+                        {r.status === 'approved' && (
+                          <button
+                            onClick={() => { setAdminCancelModal({ open: true, reservation: r }); setCancelReason(''); setCancelError('') }}
+                            className="p-1.5 rounded hover:bg-orange-50 text-orange-500 hover:text-orange-600 transition-colors"
+                            title="관리자 취소"
+                          >
+                            <Ban className="w-4 h-4" />
+                          </button>
+                        )}
                         <button
                           onClick={() => { setMemoModal({ open: true, reservation: r }); setMemoText(r.admin_memo ?? '') }}
                           className="p-1.5 rounded hover:bg-blue-50 text-gray-400 hover:text-[#003087] transition-colors"
@@ -244,6 +277,53 @@ export default function AdminTable({ reservations, onRefresh }: AdminTableProps)
             <Button onClick={handleMemoSave} loading={memoLoading} className="flex-1">저장</Button>
           </div>
         </div>
+      </Modal>
+
+      {/* Admin Cancel Modal */}
+      <Modal
+        isOpen={adminCancelModal.open}
+        onClose={() => { setAdminCancelModal({ open: false, reservation: null }); setCancelReason(''); setCancelError('') }}
+        title="관리자 취소"
+        size="md"
+      >
+        {adminCancelModal.reservation && (
+          <div>
+            <div className="bg-gray-50 rounded p-4 text-sm space-y-1.5 mb-5">
+              <div><span className="text-gray-500">신청자:</span> {adminCancelModal.reservation.name} ({adminCancelModal.reservation.department})</div>
+              <div><span className="text-gray-500">학번:</span> {adminCancelModal.reservation.student_id}</div>
+              <div>
+                <span className="text-gray-500">일시:</span>&nbsp;
+                {formatDate(adminCancelModal.reservation.reservation_date, 'yyyy년 MM월 dd일')}&nbsp;
+                {padHour(parseInt(adminCancelModal.reservation.start_time))} ~ {padHour(parseInt(adminCancelModal.reservation.end_time))}
+              </div>
+            </div>
+            <div className="mb-5">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                취소 사유 <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                rows={3}
+                value={cancelReason}
+                onChange={(e) => { setCancelReason(e.target.value); setCancelError('') }}
+                placeholder="취소 사유를 입력해 주세요. (사용자에게 공개됩니다)"
+                className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"
+              />
+              {cancelError && <p className="mt-1 text-sm text-red-500">{cancelError}</p>}
+            </div>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={() => { setAdminCancelModal({ open: false, reservation: null }); setCancelReason(''); setCancelError('') }}
+                className="flex-1"
+              >
+                돌아가기
+              </Button>
+              <Button variant="danger" onClick={handleAdminCancel} loading={cancelLoading} className="flex-1">
+                취소 확정
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   )

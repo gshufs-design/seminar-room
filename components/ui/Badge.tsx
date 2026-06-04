@@ -11,6 +11,7 @@ const colorMap: Record<ReservationStatus, string> = {
   approved: 'bg-blue-100 text-blue-900 border border-blue-300',
   rejected: 'bg-red-100 text-red-700 border border-red-300',
   cancelled: 'bg-gray-100 text-gray-600 border border-gray-300',
+  admin_cancelled: 'bg-orange-100 text-orange-700 border border-orange-300',
 }
 
 export default function Badge({ status, size = 'md' }: BadgeProps) {

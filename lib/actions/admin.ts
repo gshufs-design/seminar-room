@@ -98,6 +98,36 @@ export async function updateReservationStatus(
   return { success: true }
 }
 
+export async function adminCancelReservation(
+  reservationId: string,
+  reason: string
+): Promise<{ success: boolean; error?: string }> {
+  const session = await getAdminSession()
+  if (!session) return { success: false, error: '권한이 없습니다.' }
+
+  if (!reason || reason.trim().length === 0) {
+    return { success: false, error: '취소 사유를 입력해 주세요.' }
+  }
+
+  const supabase = createAdminClient()
+  const { error } = await supabase
+    .from('reservations')
+    .update({
+      status: 'admin_cancelled',
+      admin_memo: reason.trim(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', reservationId)
+
+  if (error) {
+    return { success: false, error: '처리 중 오류가 발생했습니다.' }
+  }
+
+  revalidatePath('/admin')
+  revalidatePath('/')
+  return { success: true }
+}
+
 export async function updateAdminMemo(
   reservationId: string,
   admin_memo: string

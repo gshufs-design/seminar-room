@@ -27,6 +27,7 @@ export function getStatusLabel(status: ReservationStatus): string {
     approved: '승인',
     rejected: '거절',
     cancelled: '취소',
+    admin_cancelled: '관리자 취소',
   }
   return labels[status]
 }
@@ -37,6 +38,7 @@ export function getStatusColor(status: ReservationStatus): string {
     approved: 'bg-blue-100 text-blue-900 border-blue-300',
     rejected: 'bg-red-100 text-red-800 border-red-300',
     cancelled: 'bg-gray-100 text-gray-600 border-gray-300',
+    admin_cancelled: 'bg-orange-100 text-orange-700 border-orange-300',
   }
   return colors[status]
 }

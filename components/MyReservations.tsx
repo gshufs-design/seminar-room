@@ -114,7 +114,12 @@ export default function MyReservations() {
                       <div className="text-sm text-gray-500">
                         사용 인원: {r.participant_count}명
                       </div>
-                      {r.admin_memo && (
+                      {r.status === 'admin_cancelled' && r.admin_memo && (
+                        <div className="text-sm text-orange-700 bg-orange-50 rounded px-3 py-1.5 mt-2">
+                          <span className="font-medium">취소 사유:</span> {r.admin_memo}
+                        </div>
+                      )}
+                      {r.status !== 'admin_cancelled' && r.admin_memo && (
                         <div className="text-sm text-blue-700 bg-blue-50 rounded px-3 py-1.5 mt-2">
                           <span className="font-medium">관리자 메모:</span> {r.admin_memo}
                         </div>
