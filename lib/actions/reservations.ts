@@ -131,14 +131,26 @@ export async function createReservation(formData: {
   revalidatePath('/')
 
   // 알림 이메일 발송 (실패해도 예약 자체는 성공으로 처리)
-  const { data: settings } = await supabase
+  console.log('[email] 이메일 발송 흐름 시작. 예약 ID:', data.id)
+
+  const { data: settings, error: settingsError } = await supabase
     .from('room_settings')
     .select('notification_email')
     .eq('id', 1)
     .single()
 
-  if (settings?.notification_email) {
-    await sendNewReservationNotification(data, settings.notification_email)
+  if (settingsError) {
+    console.error('[email] room_settings 조회 실패 (notification_email 컬럼 누락 가능성):', settingsError.message)
+  } else {
+    console.log('[email] notification_email DB 값:', settings?.notification_email ?? '(없음)')
+
+    if (!settings?.notification_email) {
+      console.log('[email] notification_email이 비어 있어 발송 생략. 관리자 페이지 → 알림 이메일 탭에서 설정하세요.')
+    } else {
+      console.log('[email] sendNewReservationNotification 호출. to:', settings.notification_email)
+      const result = await sendNewReservationNotification(data, settings.notification_email)
+      console.log('[email] 발송 결과:', JSON.stringify(result))
+    }
   }
 
   return { success: true, reservation: data }
