@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import Footer from '@/components/Footer'
 
 export const metadata: Metadata = {
   title: '한국외국어대학교 대학원 세미나실 예약 시스템',
@@ -20,7 +21,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ko">
-      <body className="min-h-screen bg-[#f5f6fa]">{children}</body>
+      <body className="min-h-screen bg-[#f5f6fa] flex flex-col">
+        {children}
+        <Footer />
+      </body>
     </html>
   )
 }

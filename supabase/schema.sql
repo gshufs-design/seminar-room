@@ -70,11 +70,15 @@ CREATE TABLE IF NOT EXISTS admins (
 -- 3. room_settings 테이블 (단일 행)
 -- =============================================
 CREATE TABLE IF NOT EXISTS room_settings (
-  id            INTEGER      PRIMARY KEY DEFAULT 1,
-  room_password VARCHAR(20)  NOT NULL DEFAULT '0000',
-  updated_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  id                 INTEGER      PRIMARY KEY DEFAULT 1,
+  room_password      VARCHAR(20)  NOT NULL DEFAULT '0000',
+  notification_email VARCHAR(255),
+  updated_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   CONSTRAINT single_row CHECK (id = 1)
 );
+
+-- 기존 테이블에 컬럼 추가 (이미 생성된 경우)
+ALTER TABLE room_settings ADD COLUMN IF NOT EXISTS notification_email VARCHAR(255);
 
 CREATE TRIGGER trg_room_settings_updated_at
   BEFORE UPDATE ON room_settings

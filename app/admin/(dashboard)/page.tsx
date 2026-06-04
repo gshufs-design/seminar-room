@@ -1,22 +1,25 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { getAllReservations, getRoomSettings } from '@/lib/actions/admin'
+import { getAllReservations, getRoomSettings, getResendConfigured } from '@/lib/actions/admin'
 import { getMonthReservations, getDayReservations } from '@/lib/actions/reservations'
 import AdminTable from '@/components/AdminTable'
 import Calendar from '@/components/Calendar'
 import TimeSlotView from '@/components/TimeSlotView'
 import PasswordManager from '@/components/PasswordManager'
+import EmailManager from '@/components/EmailManager'
 import type { Reservation } from '@/types'
-import { CalendarDays, List, KeyRound } from 'lucide-react'
+import { CalendarDays, List, KeyRound, Mail } from 'lucide-react'
 
-type Tab = 'list' | 'calendar' | 'password'
+type Tab = 'list' | 'calendar' | 'password' | 'email'
 
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<Tab>('list')
   const [reservations, setReservations] = useState<Reservation[]>([])
   const [loading, setLoading] = useState(true)
   const [roomPassword, setRoomPassword] = useState('')
+  const [notificationEmail, setNotificationEmail] = useState<string | null>(null)
+  const [resendConfigured, setResendConfigured] = useState(false)
 
   const today = new Date()
   const [year, setYear] = useState(today.getFullYear())
@@ -33,8 +36,12 @@ export default function AdminPage() {
   }, [])
 
   const loadSettings = useCallback(async () => {
-    const settings = await getRoomSettings()
-    if (settings) setRoomPassword(settings.room_password)
+    const [settings, configured] = await Promise.all([getRoomSettings(), getResendConfigured()])
+    if (settings) {
+      setRoomPassword(settings.room_password)
+      setNotificationEmail(settings.notification_email ?? null)
+    }
+    setResendConfigured(configured)
   }, [])
 
   useEffect(() => {
@@ -65,6 +72,7 @@ export default function AdminPage() {
     { id: 'list', label: '예약 목록', icon: <List className="w-4 h-4" /> },
     { id: 'calendar', label: '캘린더', icon: <CalendarDays className="w-4 h-4" /> },
     { id: 'password', label: '비밀번호 관리', icon: <KeyRound className="w-4 h-4" /> },
+    { id: 'email', label: '알림 이메일', icon: <Mail className="w-4 h-4" /> },
   ]
 
   return (
@@ -156,6 +164,10 @@ export default function AdminPage() {
 
       {activeTab === 'password' && roomPassword && (
         <PasswordManager currentPassword={roomPassword} />
+      )}
+
+      {activeTab === 'email' && (
+        <EmailManager currentEmail={notificationEmail} resendConfigured={resendConfigured} />
       )}
     </div>
   )

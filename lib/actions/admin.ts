@@ -117,19 +117,45 @@ export async function updateAdminMemo(
   return { success: true }
 }
 
-export async function getRoomSettings(): Promise<{ room_password: string } | null> {
+export async function getRoomSettings(): Promise<{ room_password: string; notification_email: string | null } | null> {
   const session = await getAdminSession()
   if (!session) return null
 
   const supabase = createAdminClient()
   const { data, error } = await supabase
     .from('room_settings')
-    .select('room_password')
+    .select('room_password, notification_email')
     .eq('id', 1)
     .single()
 
   if (error) return null
   return data
+}
+
+export async function getResendConfigured(): Promise<boolean> {
+  return !!process.env.RESEND_API_KEY
+}
+
+export async function updateNotificationEmail(
+  email: string
+): Promise<{ success: boolean; error?: string }> {
+  const session = await getAdminSession()
+  if (!session) return { success: false, error: '권한이 없습니다.' }
+
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return { success: false, error: '올바른 이메일 주소를 입력해 주세요.' }
+  }
+
+  const supabase = createAdminClient()
+  const { error } = await supabase
+    .from('room_settings')
+    .update({ notification_email: email || null, updated_at: new Date().toISOString() })
+    .eq('id', 1)
+
+  if (error) return { success: false, error: '저장 중 오류가 발생했습니다.' }
+
+  revalidatePath('/admin')
+  return { success: true }
 }
 
 export async function updateRoomPassword(

@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { canReserveTime, OPERATING_HOURS } from '@/lib/utils'
 import type { Reservation, ReservationStatus } from '@/types'
 import { revalidatePath } from 'next/cache'
+import { sendNewReservationNotification } from '@/lib/email'
 
 export async function getMonthReservations(year: number, month: number): Promise<Reservation[]> {
   const supabase = createAdminClient()
@@ -128,6 +129,18 @@ export async function createReservation(formData: {
   }
 
   revalidatePath('/')
+
+  // 알림 이메일 발송 (실패해도 예약 자체는 성공으로 처리)
+  const { data: settings } = await supabase
+    .from('room_settings')
+    .select('notification_email')
+    .eq('id', 1)
+    .single()
+
+  if (settings?.notification_email) {
+    await sendNewReservationNotification(data, settings.notification_email)
+  }
+
   return { success: true, reservation: data }
 }
 
