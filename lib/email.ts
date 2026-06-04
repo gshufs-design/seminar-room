@@ -6,7 +6,7 @@ const resend = new Resend(process.env.RESEND_API_KEY)
 // Resend에서 인증된 발신 도메인을 RESEND_FROM_EMAIL 환경변수로 설정하세요.
 // 인증되지 않은 도메인으로 발송하면 Resend API가 422 오류를 반환합니다.
 // 예: RESEND_FROM_EMAIL=noreply@yourdomain.com
-const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? 'onboarding@resend.dev'
+const FROM_EMAIL = 'onboarding@resend.dev'
 
 const STATUS_LABELS: Record<string, string> = {
   pending: '승인 대기',
@@ -30,7 +30,7 @@ export async function sendNewReservationNotification(
 
   const { data, error } = await resend.emails.send({
       from: FROM_EMAIL,
-      to: toEmail,
+      to: 'gshufs@hufs.ac.kr',
       subject: `[세미나실 예약] 새 예약 신청 - ${reservation.name} (${dateLabel})`,
       html: `
         <div style="font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; max-width: 600px; margin: 0 auto; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
