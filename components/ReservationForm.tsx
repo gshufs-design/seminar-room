@@ -53,6 +53,7 @@ export default function ReservationForm({
   const [coUsers, setCoUsers] = useState<CoUser[]>([])
   const [showCoUsersModal, setShowCoUsersModal] = useState(false)
   const [coUserErrors, setCoUserErrors] = useState<Partial<CoUser>[]>([])
+  const [coUsersError, setCoUsersError] = useState('')
 
   const [y, m, d] = date.split('-')
   const formattedDate = `${y}년 ${parseInt(m)}월 ${parseInt(d)}일`
@@ -88,8 +89,22 @@ export default function ReservationForm({
       newErrors.participant_count = '사용 인원을 입력해 주세요. (최소 1명)'
     }
     if (!form.purpose.trim()) newErrors.purpose = '사용 목적을 입력해 주세요.'
+
+    let coUsersOk = true
+    if (coUserCount >= 1) {
+      const allFilled = coUsers.every((cu) => cu.name.trim() && cu.department.trim() && cu.student_id.trim())
+      if (!allFilled) {
+        coUsersOk = false
+        setCoUsersError('동반 이용자 정보를 모두 입력해주세요.')
+      } else {
+        setCoUsersError('')
+      }
+    } else {
+      setCoUsersError('')
+    }
+
     setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
+    return Object.keys(newErrors).length === 0 && coUsersOk
   }
 
   const validateCoUsers = (): boolean => {
@@ -142,6 +157,7 @@ export default function ReservationForm({
     setCoUsers([])
     setShowCoUsersModal(false)
     setCoUserErrors([])
+    setCoUsersError('')
     onClose()
   }
 
@@ -165,6 +181,7 @@ export default function ReservationForm({
 
   const handleCoUsersSave = () => {
     if (!validateCoUsers()) return
+    setCoUsersError('')
     setShowCoUsersModal(false)
   }
 
@@ -207,15 +224,18 @@ export default function ReservationForm({
 
               {/* 동반 이용자 정보 입력 버튼 */}
               {coUserCount >= 1 && (
-                <div>
+                <div className="flex flex-col gap-1">
                   <button
                     type="button"
                     onClick={() => setShowCoUsersModal(true)}
-                    className="flex items-center gap-2 px-4 py-2 rounded border border-[#003087] text-[#003087] text-sm font-medium hover:bg-blue-50 transition-colors"
+                    className={`flex items-center gap-2 px-4 py-2 rounded border text-sm font-medium hover:bg-blue-50 transition-colors ${
+                      coUsersError ? 'border-red-400 text-red-600' : 'border-[#003087] text-[#003087]'
+                    }`}
                   >
                     <Users className="w-4 h-4" />
                     동반 이용자 정보 입력 ({filledCoUsers}/{coUserCount}명 완료)
                   </button>
+                  {coUsersError && <p className="text-xs text-red-500">{coUsersError}</p>}
                 </div>
               )}
 

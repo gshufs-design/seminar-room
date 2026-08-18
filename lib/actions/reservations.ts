@@ -70,6 +70,19 @@ export async function createReservation(formData: {
     return { success: false, error: '사용 인원은 1~50명 사이여야 합니다.' }
   }
 
+  // 동반 이용자 정보 검증 (2명 이상 시 필수)
+  if (participant_count >= 2) {
+    const expectedCoUsers = participant_count - 1
+    if (!co_users || co_users.length < expectedCoUsers) {
+      return { success: false, error: '동반 이용자 정보를 모두 입력해주세요.' }
+    }
+    for (const cu of co_users) {
+      if (!cu.name?.trim() || !cu.department?.trim() || !cu.student_id?.trim()) {
+        return { success: false, error: '동반 이용자 정보를 모두 입력해주세요.' }
+      }
+    }
+  }
+
   // 시간 범위 검증
   const duration = end_hour - start_hour
   if (duration < 1 || duration > 3) {
