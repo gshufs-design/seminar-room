@@ -80,6 +80,7 @@ export default function ReservationForm({
     if (!form.name.trim()) newErrors.name = '이름을 입력해 주세요.'
     if (!form.department.trim()) newErrors.department = '학과를 입력해 주세요.'
     if (!form.student_id.trim()) newErrors.student_id = '학번을 입력해 주세요.'
+    else if (!/^\d{9}$/.test(form.student_id)) newErrors.student_id = '학번은 9자리 숫자로 입력해 주세요.'
     if (!form.phone.trim()) newErrors.phone = '연락처를 입력해 주세요.'
     if (!/^\d{10,11}$/.test(form.phone.replace(/-/g, ''))) {
       newErrors.phone = '올바른 연락처 형식을 입력해 주세요. (예: 01012345678)'
@@ -218,7 +219,7 @@ export default function ReservationForm({
             <div className="space-y-4">
               <Input label="이름" required placeholder="홍길동" value={form.name} onChange={change('name')} error={errors.name} />
               <Input label="학과" required placeholder="컴퓨터공학과" value={form.department} onChange={change('department')} error={errors.department} />
-              <Input label="학번" required placeholder="2024123456" value={form.student_id} onChange={change('student_id')} error={errors.student_id} />
+              <Input label="학번" required placeholder="202412345" value={form.student_id} onChange={change('student_id')} error={errors.student_id} maxLength={9} inputMode="numeric" pattern="\d*" />
               <Input label="연락처" required placeholder="01012345678" value={form.phone} onChange={change('phone')} error={errors.phone} maxLength={13} />
               <Input label="사용 인원" required type="number" min={1} max={50} placeholder="5" value={form.participant_count} onChange={change('participant_count')} error={errors.participant_count} />
 
@@ -252,7 +253,7 @@ export default function ReservationForm({
                   className={`w-full px-3 py-2 border rounded text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#003087] focus:border-[#003087] resize-none ${errors.purpose ? 'border-red-400' : 'border-gray-300'}`}
                 />
                 {errors.purpose && <p className="text-xs text-red-500">{errors.purpose}</p>}
-                <p className="text-xs text-amber-600">※ 사용 목적 외 이용 시 이용이 제한될 수 있습니다.</p>
+                <p className="text-xs text-amber-600">※ 사용 목적 외 이용은 제한될 수 있습니다.</p>
               </div>
             </div>
 
