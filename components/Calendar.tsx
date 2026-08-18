@@ -48,6 +48,8 @@ export default function Calendar({
   )
 
   const today = new Date()
+  const maxDate = new Date(today)
+  maxDate.setDate(maxDate.getDate() + 30)
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
@@ -93,42 +95,48 @@ export default function Calendar({
         {Array.from({ length: daysInMonth }).map((_, i) => {
           const day = i + 1
           const dateStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+          const dateObj = new Date(currentYear, currentMonth - 1, day)
           const isSelected = selectedDate === dateStr
-          const isCurrentDay = isToday(new Date(currentYear, currentMonth - 1, day))
+          const isCurrentDay = isToday(dateObj)
+          const isDisabled = dateObj > maxDate
           const { hasPending, hasApproved } = getDateStatus(day)
           const weekday = (firstDay + i) % 7
 
           return (
             <button
               key={day}
-              onClick={() => onSelectDate(dateStr)}
+              onClick={() => !isDisabled && onSelectDate(dateStr)}
+              disabled={isDisabled}
               className={`
                 relative flex flex-col items-center justify-center aspect-square
                 text-sm transition-colors
-                ${isSelected ? 'bg-[#003087] text-white rounded-lg' : 'hover:bg-gray-50'}
-                ${weekday === 0 && !isSelected ? 'text-red-500' : ''}
-                ${weekday === 6 && !isSelected ? 'text-blue-600' : ''}
-                ${!isSelected && !weekday && !weekday === false ? 'text-gray-800' : ''}
+                ${isDisabled ? 'opacity-30 cursor-not-allowed' : ''}
+                ${isSelected && !isDisabled ? 'bg-[#003087] text-white rounded-lg' : ''}
+                ${!isSelected && !isDisabled ? 'hover:bg-gray-50' : ''}
+                ${weekday === 0 && !isSelected && !isDisabled ? 'text-red-500' : ''}
+                ${weekday === 6 && !isSelected && !isDisabled ? 'text-blue-600' : ''}
               `}
             >
               <span
                 className={`
                   w-8 h-8 flex items-center justify-center rounded-full text-sm font-medium
-                  ${isSelected ? 'bg-[#003087] text-white' : ''}
+                  ${isSelected && !isDisabled ? 'bg-[#003087] text-white' : ''}
                   ${isCurrentDay && !isSelected ? 'ring-2 ring-[#003087] text-[#003087]' : ''}
                 `}
               >
                 {day}
               </span>
               {/* Status dots */}
-              <div className="flex gap-0.5 mt-0.5 h-2">
-                {hasPending && (
-                  <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-yellow-300' : 'bg-yellow-400'}`} />
-                )}
-                {hasApproved && (
-                  <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-blue-200' : 'bg-[#003087]'}`} />
-                )}
-              </div>
+              {!isDisabled && (
+                <div className="flex gap-0.5 mt-0.5 h-2">
+                  {hasPending && (
+                    <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-yellow-300' : 'bg-yellow-400'}`} />
+                  )}
+                  {hasApproved && (
+                    <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-blue-200' : 'bg-[#003087]'}`} />
+                  )}
+                </div>
+              )}
             </button>
           )
         })}

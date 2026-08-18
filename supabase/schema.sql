@@ -16,8 +16,10 @@ CREATE TABLE IF NOT EXISTS reservations (
   start_time         TIME         NOT NULL,
   end_time           TIME         NOT NULL,
   status             VARCHAR(20)  NOT NULL DEFAULT 'pending'
-                       CHECK (status IN ('pending', 'approved', 'rejected', 'cancelled')),
+                       CHECK (status IN ('pending', 'approved', 'rejected', 'cancelled', 'admin_cancelled')),
   admin_memo         TEXT,
+  purpose            TEXT         NOT NULL DEFAULT '',
+  co_users           JSONB        DEFAULT NULL,
   created_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   updated_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );

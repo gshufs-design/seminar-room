@@ -133,6 +133,7 @@ export default function AdminTable({ reservations, onRefresh }: AdminTableProps)
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">일시</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">신청자</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">학과</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">연락처</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">인원</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">상태</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">처리</th>
@@ -141,7 +142,7 @@ export default function AdminTable({ reservations, onRefresh }: AdminTableProps)
             <tbody className="divide-y divide-gray-100">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-gray-400">예약 내역이 없습니다.</td>
+                  <td colSpan={8} className="px-4 py-10 text-center text-gray-400">예약 내역이 없습니다.</td>
                 </tr>
               ) : (
                 filtered.map((r) => (
@@ -156,6 +157,7 @@ export default function AdminTable({ reservations, onRefresh }: AdminTableProps)
                       <div className="text-gray-500">{r.student_id}</div>
                     </td>
                     <td className="px-4 py-3 text-gray-600">{r.department}</td>
+                    <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{r.phone}</td>
                     <td className="px-4 py-3 text-center text-gray-600">{r.participant_count}명</td>
                     <td className="px-4 py-3 text-center">
                       <Badge status={r.status} size="sm" />
@@ -223,12 +225,26 @@ export default function AdminTable({ reservations, onRefresh }: AdminTableProps)
             <div className="bg-gray-50 rounded p-4 text-sm space-y-1.5 mb-5">
               <div><span className="text-gray-500">신청자:</span> {actionModal.reservation.name} ({actionModal.reservation.department})</div>
               <div><span className="text-gray-500">학번:</span> {actionModal.reservation.student_id}</div>
+              <div><span className="text-gray-500">연락처:</span> {actionModal.reservation.phone}</div>
               <div>
                 <span className="text-gray-500">일시:</span>&nbsp;
                 {formatDate(actionModal.reservation.reservation_date, 'yyyy년 MM월 dd일')}&nbsp;
                 {padHour(parseInt(actionModal.reservation.start_time))} ~ {padHour(parseInt(actionModal.reservation.end_time))}
               </div>
               <div><span className="text-gray-500">인원:</span> {actionModal.reservation.participant_count}명</div>
+              {actionModal.reservation.purpose && (
+                <div><span className="text-gray-500">사용 목적:</span> {actionModal.reservation.purpose}</div>
+              )}
+              {actionModal.reservation.co_users && actionModal.reservation.co_users.length > 0 && (
+                <div>
+                  <span className="text-gray-500">동반 이용자:</span>
+                  <ul className="mt-1 ml-2 space-y-0.5">
+                    {actionModal.reservation.co_users.map((cu, idx) => (
+                      <li key={idx} className="text-gray-700">· {cu.name} ({cu.department}, {cu.student_id})</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
             <div className="mb-5">
               <label className="block text-sm font-medium text-gray-700 mb-1">관리자 메모 (선택)</label>
@@ -291,11 +307,25 @@ export default function AdminTable({ reservations, onRefresh }: AdminTableProps)
             <div className="bg-gray-50 rounded p-4 text-sm space-y-1.5 mb-5">
               <div><span className="text-gray-500">신청자:</span> {adminCancelModal.reservation.name} ({adminCancelModal.reservation.department})</div>
               <div><span className="text-gray-500">학번:</span> {adminCancelModal.reservation.student_id}</div>
+              <div><span className="text-gray-500">연락처:</span> {adminCancelModal.reservation.phone}</div>
               <div>
                 <span className="text-gray-500">일시:</span>&nbsp;
                 {formatDate(adminCancelModal.reservation.reservation_date, 'yyyy년 MM월 dd일')}&nbsp;
                 {padHour(parseInt(adminCancelModal.reservation.start_time))} ~ {padHour(parseInt(adminCancelModal.reservation.end_time))}
               </div>
+              {adminCancelModal.reservation.purpose && (
+                <div><span className="text-gray-500">사용 목적:</span> {adminCancelModal.reservation.purpose}</div>
+              )}
+              {adminCancelModal.reservation.co_users && adminCancelModal.reservation.co_users.length > 0 && (
+                <div>
+                  <span className="text-gray-500">동반 이용자:</span>
+                  <ul className="mt-1 ml-2 space-y-0.5">
+                    {adminCancelModal.reservation.co_users.map((cu, idx) => (
+                      <li key={idx} className="text-gray-700">· {cu.name} ({cu.department}, {cu.student_id})</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
             <div className="mb-5">
               <label className="block text-sm font-medium text-gray-700 mb-1">

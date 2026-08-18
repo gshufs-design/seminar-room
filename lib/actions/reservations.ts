@@ -54,12 +54,17 @@ export async function createReservation(formData: {
   reservation_date: string
   start_hour: number
   end_hour: number
+  purpose: string
+  co_users: { name: string; department: string; student_id: string }[]
 }): Promise<{ success: boolean; error?: string; reservation?: Reservation }> {
-  const { name, department, student_id, phone, participant_count, reservation_date, start_hour, end_hour } = formData
+  const { name, department, student_id, phone, participant_count, reservation_date, start_hour, end_hour, purpose, co_users } = formData
 
   // 입력 검증
   if (!name || !department || !student_id || !phone || !participant_count) {
     return { success: false, error: '모든 항목을 입력해 주세요.' }
+  }
+  if (!purpose?.trim()) {
+    return { success: false, error: '사용 목적을 입력해 주세요.' }
   }
   if (participant_count < 1 || participant_count > 50) {
     return { success: false, error: '사용 인원은 1~50명 사이여야 합니다.' }
@@ -74,6 +79,14 @@ export async function createReservation(formData: {
     return { success: false, error: `운영 시간(${OPERATING_HOURS.start}:00~${OPERATING_HOURS.end}:00) 내에서만 예약 가능합니다.` }
   }
 
+  // 신청일 기준 30일 이내 검증
+  const maxDate = new Date()
+  maxDate.setDate(maxDate.getDate() + 30)
+  const maxDateStr = maxDate.toISOString().split('T')[0]
+  if (reservation_date > maxDateStr) {
+    return { success: false, error: '신청일 기준 30일 이내의 날짜만 예약 가능합니다.' }
+  }
+
   // 24시간 전 검증
   if (!canReserveTime(reservation_date, start_hour)) {
     return { success: false, error: '예약은 시작 시각 기준 24시간 이전에만 신청할 수 있습니다.' }
@@ -83,6 +96,28 @@ export async function createReservation(formData: {
   const end_time = `${String(end_hour).padStart(2, '0')}:00:00`
 
   const supabase = createAdminClient()
+
+  // 1인당 9시간 예약 제한 확인
+  const { data: myReservations, error: hoursError } = await supabase
+    .from('reservations')
+    .select('start_time, end_time')
+    .eq('student_id', student_id)
+    .in('status', ['pending', 'approved'])
+
+  if (hoursError) {
+    return { success: false, error: '예약 시간 확인 중 오류가 발생했습니다.' }
+  }
+
+  const usedHours = (myReservations ?? []).reduce((sum, r) => {
+    return sum + (parseInt(r.end_time) - parseInt(r.start_time))
+  }, 0)
+
+  if (usedHours + duration > 9) {
+    return {
+      success: false,
+      error: `현재 ${usedHours}시간 예약 중입니다. 최대 9시간까지 가능합니다.`,
+    }
+  }
 
   // 중복 예약 확인 (pending / approved 상태 확인)
   const { data: existing, error: checkError } = await supabase
@@ -119,6 +154,8 @@ export async function createReservation(formData: {
       start_time,
       end_time,
       status: 'pending',
+      purpose: purpose.trim(),
+      co_users: co_users.length > 0 ? co_users : null,
     })
     .select()
     .single()

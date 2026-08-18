@@ -1,5 +1,11 @@
 export type ReservationStatus = 'pending' | 'approved' | 'rejected' | 'cancelled' | 'admin_cancelled'
 
+export interface CoUser {
+  name: string
+  department: string
+  student_id: string
+}
+
 export interface Reservation {
   id: string
   reservation_number: number
@@ -13,6 +19,8 @@ export interface Reservation {
   end_time: string
   status: ReservationStatus
   admin_memo: string | null
+  purpose: string
+  co_users: CoUser[] | null
   created_at: string
   updated_at: string
 }
