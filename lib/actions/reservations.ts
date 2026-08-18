@@ -110,11 +110,11 @@ export async function createReservation(formData: {
 
   const supabase = createAdminClient()
 
-  // 1인당 9시간 예약 제한 확인
+  // 1인당 9시간 예약 제한 확인 (학번·이름·연락처 중 하나라도 일치하면 동일인 판단)
   const { data: myReservations, error: hoursError } = await supabase
     .from('reservations')
     .select('start_time, end_time')
-    .eq('student_id', student_id)
+    .or(`student_id.eq.${student_id},name.eq.${name},phone.eq.${phone}`)
     .in('status', ['pending', 'approved'])
 
   if (hoursError) {
