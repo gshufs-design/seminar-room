@@ -118,7 +118,7 @@ export default function AdminLockerSettingsPanel() {
         <h3 className="font-semibold text-gray-900">학기별 이용 마감일</h3>
         <p className="text-sm text-gray-500 mt-1 mb-3">
           매년 3월 첫째 주 금요일 · 9월 첫째 주 금요일을 기준으로, 신청일에 따라 자동으로 계산됩니다.
-          더 이상 직접 입력하지 않아도 됩니다.
+          (단, 1일이 금요일이면 그 다음 주 금요일로 계산됩니다.) 더 이상 직접 입력하지 않아도 됩니다.
         </p>
         <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm text-blue-800">
           지금 신청하면 한 학기는 <span className="font-semibold">{computeTermEndDate('1', todayISOKst())}</span>까지,
