@@ -43,24 +43,13 @@ export default function LockersPage() {
     <>
       <Header />
       <main className="w-full max-w-5xl mx-auto px-4 py-8">
-        <div className="mb-6 flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              {selectedZone ? `${selectedZone.label} 사물함` : '사물함 신청'}
-            </h1>
-            <p className="text-sm text-gray-500 mt-1 whitespace-nowrap">
-              {selectedZone ? selectedZone.description : '그림에서 구역을 선택한 후, 원하는 칸을 눌러 신청해 주세요.'}
-            </p>
-          </div>
-          {selectedZone && (
-            <button
-              onClick={() => setSelectedZoneId(null)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded text-sm font-medium text-[#003087] border border-[#003087]/30 hover:bg-[#003087]/5 flex-shrink-0"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              전체 도면
-            </button>
-          )}
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">
+            {selectedZone ? `${selectedZone.label} 사물함` : '사물함 신청'}
+          </h1>
+          <p className="text-sm text-gray-500 mt-1 whitespace-nowrap">
+            {selectedZone ? selectedZone.description : '그림에서 구역을 선택한 후, 원하는 칸을 눌러 신청해 주세요.'}
+          </p>
         </div>
 
         {!settings.applications_open ? (
@@ -90,6 +79,16 @@ export default function LockersPage() {
               )}
             </div>
           </div>
+        )}
+
+        {selectedZone && (
+          <button
+            onClick={() => setSelectedZoneId(null)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded text-sm font-medium text-[#003087] border border-[#003087]/30 hover:bg-[#003087]/5 mb-4"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            전체 그림
+          </button>
         )}
 
         {loading ? (
