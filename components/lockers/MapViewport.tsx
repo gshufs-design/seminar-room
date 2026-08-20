@@ -29,6 +29,12 @@ export default function MapViewport({ width, height, background, children }: Map
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const panRef = useRef<{ startX: number; startY: number; origX: number; origY: number; moved: boolean } | null>(null)
 
+  // 네이티브 리스너(터치)에서 최신 scale/pan 값을 참조하기 위한 ref
+  const scaleRef = useRef(scale)
+  useEffect(() => { scaleRef.current = scale }, [scale])
+  const panStateRef = useRef(pan)
+  useEffect(() => { panStateRef.current = pan }, [pan])
+
   const fitToView = useCallback(() => {
     const el = outerRef.current
     if (!el) return
@@ -69,6 +75,66 @@ export default function MapViewport({ width, height, background, children }: Map
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // 모바일 터치: 손가락 한 개면 이동(pan), 두 개면 핀치로 확대/축소.
+  type TouchGesture =
+    | { mode: 'pan'; startX: number; startY: number; origX: number; origY: number }
+    | { mode: 'pinch'; startDist: number; startScale: number }
+  useEffect(() => {
+    const el = outerRef.current
+    if (!el) return
+
+    const dist = (touches: TouchList) => {
+      const dx = touches[0].clientX - touches[1].clientX
+      const dy = touches[0].clientY - touches[1].clientY
+      return Math.hypot(dx, dy)
+    }
+
+    let gesture: TouchGesture | null = null
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        gesture = { mode: 'pinch', startDist: dist(e.touches), startScale: scaleRef.current }
+      } else if (e.touches.length === 1) {
+        const t = e.touches[0]
+        gesture = { mode: 'pan', startX: t.clientX, startY: t.clientY, origX: panStateRef.current.x, origY: panStateRef.current.y }
+      }
+    }
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!gesture) return
+      e.preventDefault()
+      if (gesture.mode === 'pinch' && e.touches.length === 2) {
+        const factor = dist(e.touches) / gesture.startDist
+        setScale(clampScale(gesture.startScale * factor))
+      } else if (gesture.mode === 'pan' && e.touches.length === 1) {
+        const t = e.touches[0]
+        setPan({ x: gesture.origX + (t.clientX - gesture.startX), y: gesture.origY + (t.clientY - gesture.startY) })
+      }
+    }
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length === 1) {
+        // 핀치(2손가락)에서 손가락 하나를 뗀 경우, 남은 손가락으로 이동을 이어갑니다.
+        const t = e.touches[0]
+        gesture = { mode: 'pan', startX: t.clientX, startY: t.clientY, origX: panStateRef.current.x, origY: panStateRef.current.y }
+      } else if (e.touches.length === 0) {
+        gesture = null
+      }
+    }
+
+    el.addEventListener('touchstart', onTouchStart, { passive: false })
+    el.addEventListener('touchmove', onTouchMove, { passive: false })
+    el.addEventListener('touchend', onTouchEnd, { passive: false })
+    el.addEventListener('touchcancel', onTouchEnd, { passive: false })
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart)
+      el.removeEventListener('touchmove', onTouchMove)
+      el.removeEventListener('touchend', onTouchEnd)
+      el.removeEventListener('touchcancel', onTouchEnd)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -158,7 +224,7 @@ export default function MapViewport({ width, height, background, children }: Map
         </div>
       </div>
       <p style={{ fontSize: 11, color: '#8A7C60', textAlign: 'center', marginTop: 8 }}>
-        💡 마우스 휠로 확대/축소할 수 있고, 빈 곳을 드래그하면 화면이 움직입니다.
+        💡 마우스 휠(또는 두 손가락 핀치)로 확대/축소, 드래그(한 손가락)로 화면을 움직일 수 있습니다.
       </p>
     </div>
   )
