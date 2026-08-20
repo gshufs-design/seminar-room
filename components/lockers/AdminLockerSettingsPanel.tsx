@@ -9,6 +9,7 @@ import {
   removeDuplicateException,
   type LockerDuplicateException,
 } from '@/lib/actions/lockers'
+import { computeTermEndDate, todayISOKst } from '@/lib/lockers/data'
 import type { LockerSettings } from '@/types'
 import { CheckCircle2, X } from 'lucide-react'
 
@@ -112,31 +113,17 @@ export default function AdminLockerSettingsPanel() {
         </p>
       </section>
 
-      {/* 학기별 이용 마감일 */}
+      {/* 학기별 이용 마감일 (자동 계산) */}
       <section className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
         <h3 className="font-semibold text-gray-900">학기별 이용 마감일</h3>
-        <p className="text-sm text-gray-500 mt-1 mb-4">
-          이 날짜까지 사용할 수 있다고 학생들에게 표시됩니다. 비워두면 마감일 없이 계속 사용 가능한 것으로 처리됩니다.
+        <p className="text-sm text-gray-500 mt-1 mb-3">
+          매년 3월 첫째 주 금요일 · 9월 첫째 주 금요일을 기준으로, 신청일에 따라 자동으로 계산됩니다.
+          더 이상 직접 입력하지 않아도 됩니다.
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="text-sm font-medium text-gray-700">6개월(한 학기) 마감일</label>
-            <input
-              type="date"
-              value={settings.term1_end_date ?? ''}
-              onChange={(e) => save({ term1_end_date: e.target.value || null })}
-              className="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#003087]/30"
-            />
-          </div>
-          <div>
-            <label className="text-sm font-medium text-gray-700">1년(두 학기) 마감일</label>
-            <input
-              type="date"
-              value={settings.term2_end_date ?? ''}
-              onChange={(e) => save({ term2_end_date: e.target.value || null })}
-              className="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#003087]/30"
-            />
-          </div>
+        <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm text-blue-800">
+          지금 신청하면 한 학기는 <span className="font-semibold">{computeTermEndDate('1', todayISOKst())}</span>까지,
+          두 학기는 <span className="font-semibold">{computeTermEndDate('2', todayISOKst())}</span>까지 이용할 수 있습니다.
+          (자동 계산됨)
         </div>
       </section>
 

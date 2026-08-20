@@ -93,9 +93,16 @@ export function blockNumbers(block: LockerBlock): (number | null)[] {
 }
 
 export const TERM_LABELS: Record<string, string> = {
-  '1': '6개월 (한 학기)',
-  '2': '1년 (두 학기)',
+  '1': '한 학기',
+  '2': '두 학기',
 }
+
+/** 신청 완료 시점에 동의 문구가 따로 설정되어 있지 않으면 이 기본 문구가 스냅샷으로 저장/표시됩니다. */
+export const DEFAULT_AGREEMENT_TEXT = `1. 사물함은 신청 시 선택한 이용 기간(한 학기 또는 두 학기) 동안만 사용할 수 있습니다.
+2. 이용 마감일이 지나면 안내된 기간 내에 반드시 물품을 회수해야 하며, 회수하지 않은 물품은 임의로 처리될 수 있습니다.
+3. 사물함 내 물품 분실·파손에 대해 총학생회는 책임지지 않습니다.
+4. 타인에게 사물함을 양도하거나 대여할 수 없습니다.
+5. 위 내용을 확인하지 않아 발생하는 불이익은 신청자 본인이 부담합니다.`
 
 /** 저장된 숫자만 있는 연락처를 화면에 보기 좋게 (010-1234-5678) */
 export function formatPhone(phone: string): string {
@@ -124,15 +131,53 @@ export function addDaysISO(dateStr: string, days: number): string {
   return d.toISOString().slice(0, 10)
 }
 
-export interface LockerPeriodSettings {
-  term1_end_date: string | null
-  term2_end_date: string | null
-  clearing_period_days: number
+/** 두 'YYYY-MM-DD' 사이의 일수 차이 (toISO - fromISO) */
+export function diffDaysISO(fromISO: string, toISO: string): number {
+  const a = new Date(fromISO + 'T00:00:00Z').getTime()
+  const b = new Date(toISO + 'T00:00:00Z').getTime()
+  return Math.round((b - a) / (24 * 60 * 60 * 1000))
 }
 
-/** 이 학기(term)의 이용 마감일 (관리자가 설정 안 했으면 null = 마감일 없음) */
-export function termEndDate(term: string, settings: LockerPeriodSettings): string | null {
-  return term === '1' ? settings.term1_end_date : settings.term2_end_date
+/** ISO 타임스탬프(예: created_at)를 한국시간(KST) 기준 'YYYY-MM-DD' 날짜로 */
+export function toKstDateISO(isoTimestamp: string): string {
+  const d = new Date(isoTimestamp)
+  const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000)
+  return kst.toISOString().slice(0, 10)
+}
+
+/** 해당 연/월의 "첫째 주 금요일" 날짜를 'YYYY-MM-DD'로 */
+export function firstFridayOfMonth(year: number, month: number): string {
+  const d = new Date(Date.UTC(year, month - 1, 1))
+  const dow = d.getUTCDay() // 0=일 ... 5=금 ... 6=토
+  const diff = (5 - dow + 7) % 7
+  d.setUTCDate(d.getUTCDate() + diff)
+  return d.toISOString().slice(0, 10)
+}
+
+/**
+ * 사물함 이용 마감일은 "매년 3월 첫째 주 금요일"과 "매년 9월 첫째 주 금요일"이
+ * 반복되는 구조입니다. fromDateISO(신청일) 기준으로,
+ * - term '1'(한 학기): 신청일 이후 가장 가까운(당일 포함) 마감일
+ * - term '2'(두 학기): 그 다음 마감일
+ * 을 반환합니다. 연도가 바뀌는 경우도 정확히 계산됩니다.
+ */
+export function computeTermEndDate(term: '1' | '2', fromDateISO: string): string {
+  const year = Number(fromDateISO.slice(0, 4))
+  const candidates = [
+    firstFridayOfMonth(year, 3),
+    firstFridayOfMonth(year, 9),
+    firstFridayOfMonth(year + 1, 3),
+    firstFridayOfMonth(year + 1, 9),
+  ]
+  const upcoming = candidates.filter((c) => c >= fromDateISO).sort()
+  const term1End = upcoming[0] ?? firstFridayOfMonth(year + 1, 3)
+  const term2End = upcoming[1] ?? firstFridayOfMonth(year + 1, 9)
+  return term === '1' ? term1End : term2End
+}
+
+/** 신청 시점(created_at)과 신청 학기를 바탕으로, 그 신청 건의 실제 이용 마감일을 계산합니다. */
+export function requestTermEndDate(term: string, createdAt: string): string {
+  return computeTermEndDate(term === '2' ? '2' : '1', toKstDateISO(createdAt))
 }
 
 /**
@@ -147,14 +192,14 @@ export function termEndDate(term: string, settings: LockerPeriodSettings): strin
 export function computeDisplayStatus(
   rawStatus: 'pending' | 'approved' | 'rejected' | 'cancelled' | 'expired',
   term: string,
-  settings: LockerPeriodSettings
+  createdAt: string,
+  clearingPeriodDays: number
 ): 'pending' | 'approved' | 'rejected' | 'cancelled' | 'expired' | 'clearing' {
   if (rawStatus !== 'approved') return rawStatus
-  const endDate = termEndDate(term, settings)
-  if (!endDate) return 'approved'
+  const endDate = requestTermEndDate(term, createdAt)
   const today = todayISOKst()
   if (today <= endDate) return 'approved'
-  const clearEnd = addDaysISO(endDate, settings.clearing_period_days)
+  const clearEnd = addDaysISO(endDate, clearingPeriodDays)
   if (today <= clearEnd) return 'clearing'
   return 'expired'
 }

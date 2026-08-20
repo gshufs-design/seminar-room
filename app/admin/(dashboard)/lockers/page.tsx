@@ -1,9 +1,9 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { getAllLockerRequests, updateLockerRequestStatus, getLockerSettings } from '@/lib/actions/lockers'
-import { TERM_LABELS, formatPhone, termEndDate, todayISOKst } from '@/lib/lockers/data'
-import type { LockerRequest, LockerRequestStatus, LockerSettings } from '@/types'
+import { getAllLockerRequests, updateLockerRequestStatus } from '@/lib/actions/lockers'
+import { TERM_LABELS, formatPhone, requestTermEndDate, todayISOKst } from '@/lib/lockers/data'
+import type { LockerRequest, LockerRequestStatus } from '@/types'
 import { Check, X, RotateCcw, ClipboardList, MapPin, Settings, Search, Download } from 'lucide-react'
 import AdminLockerLayoutEditor from '@/components/lockers/AdminLockerLayoutEditor'
 import AdminLockerSettingsPanel from '@/components/lockers/AdminLockerSettingsPanel'
@@ -26,10 +26,10 @@ const STATUS_LABEL: Record<LockerRequestStatus, string> = {
   expired: '이용 만료',
 }
 
-function toCsv(rows: LockerRequest[], settings: LockerSettings | null): string {
+function toCsv(rows: LockerRequest[]): string {
   const header = ['위치', '블록', '번호', '학과', '이름', '학번(사번)', '연락처', '이메일', '신청학기', '이용마감일', '상태', '신청일시']
   const lines = rows.map((r) => {
-    const endDate = settings ? termEndDate(r.term, settings) ?? '' : ''
+    const endDate = requestTermEndDate(r.term, r.created_at)
     const values = [
       r.zone_label,
       r.block_label,
@@ -52,7 +52,6 @@ function toCsv(rows: LockerRequest[], settings: LockerSettings | null): string {
 export default function AdminLockersPage() {
   const [pageView, setPageView] = useState<PageView>('requests')
   const [requests, setRequests] = useState<LockerRequest[]>([])
-  const [settings, setSettings] = useState<LockerSettings | null>(null)
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<Filter>('pending')
   const [search, setSearch] = useState('')
@@ -60,9 +59,8 @@ export default function AdminLockersPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [data, settingsData] = await Promise.all([getAllLockerRequests('all'), getLockerSettings()])
+    const data = await getAllLockerRequests('all')
     setRequests(data)
-    setSettings(settingsData)
     setLoading(false)
   }, [])
 
@@ -110,7 +108,7 @@ export default function AdminLockersPage() {
   ]
 
   const handleExport = () => {
-    const csv = toCsv(filtered, settings)
+    const csv = toCsv(filtered)
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -237,7 +235,7 @@ export default function AdminLockersPage() {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {filtered.map((r) => {
-                    const endDate = settings ? termEndDate(r.term, settings) : null
+                    const endDate = requestTermEndDate(r.term, r.created_at)
                     return (
                       <tr key={r.id}>
                         <td className="px-4 py-3 align-top">
@@ -258,7 +256,7 @@ export default function AdminLockersPage() {
                         </td>
                         <td className="px-4 py-3 align-top text-gray-700">
                           <p>{TERM_LABELS[r.term] ?? r.term}</p>
-                          {endDate && <p className="text-xs text-gray-500">📅 {endDate}까지</p>}
+                          <p className="text-xs text-gray-500">📅 {endDate}까지</p>
                         </td>
                         <td className="px-4 py-3 align-top">
                           <span className={`inline-flex items-center rounded-full font-medium text-xs px-2.5 py-0.5 ${STATUS_STYLE[r.status]}`}>

@@ -6,15 +6,13 @@ import LockerFloorMap from '@/components/lockers/LockerFloorMap'
 import LockerLobbyScene from '@/components/lockers/LockerLobbyScene'
 import LockerReadingScene from '@/components/lockers/LockerReadingScene'
 import { getLockerStatuses, getLockerSettings } from '@/lib/actions/lockers'
-import { LOCKER_ZONES } from '@/lib/lockers/data'
+import { LOCKER_ZONES, computeTermEndDate, todayISOKst } from '@/lib/lockers/data'
 import type { LockerStatusEntry, LockerSettings } from '@/types'
 import { Info, CalendarDays, ArrowLeft, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
 
 const DEFAULT_SETTINGS: LockerSettings = {
   applications_open: false,
-  term1_end_date: null,
-  term2_end_date: null,
   clearing_period_days: 7,
   notice_text: null,
   agreement_text: null,
@@ -72,8 +70,8 @@ export default function LockersPage() {
                 <>
                   <p>신청 후 관리자 승인이 완료되어야 예약이 확정됩니다.</p>
                   <p>
-                    6개월(한 학기){settings.term1_end_date ? ` — ${settings.term1_end_date}까지 이용 가능` : ''} 또는
-                    {' '}1년(두 학기){settings.term2_end_date ? ` — ${settings.term2_end_date}까지 이용 가능` : ''} 중에서 선택할 수 있습니다.
+                    한 학기 — {computeTermEndDate('1', todayISOKst())}까지 이용 가능 또는
+                    {' '}두 학기 — {computeTermEndDate('2', todayISOKst())}까지 이용 가능 중에서 선택할 수 있습니다.
                   </p>
                 </>
               )}

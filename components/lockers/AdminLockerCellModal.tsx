@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Modal from '@/components/ui/Modal'
-import { TERM_LABELS, formatPhone } from '@/lib/lockers/data'
+import { TERM_LABELS, formatPhone, requestTermEndDate } from '@/lib/lockers/data'
 import { updateLockerRequestStatus } from '@/lib/actions/lockers'
 import type { LockerRequest, LockerRequestStatus } from '@/types'
 import { Check, X, RotateCcw } from 'lucide-react'
@@ -59,6 +59,7 @@ export default function AdminLockerCellModal({ request, onClose, onChanged }: Ad
           <Row label="연락처" value={formatPhone(request.phone)} />
           <Row label="이메일" value={request.email} />
           <Row label="신청 학기" value={TERM_LABELS[request.term] ?? request.term} />
+          <Row label="이용 마감일" value={requestTermEndDate(request.term, request.created_at)} />
         </dl>
 
         {request.status === 'pending' ? (

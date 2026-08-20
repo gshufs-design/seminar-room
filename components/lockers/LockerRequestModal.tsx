@@ -5,15 +5,9 @@ import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
 import Button from '@/components/ui/Button'
 import { createLockerRequest, getLockerSettings } from '@/lib/actions/lockers'
-import { TERM_LABELS } from '@/lib/lockers/data'
+import { TERM_LABELS, DEFAULT_AGREEMENT_TEXT, computeTermEndDate, todayISOKst } from '@/lib/lockers/data'
 import type { LockerSettings } from '@/types'
 import { CheckCircle2, ShieldCheck } from 'lucide-react'
-
-const DEFAULT_AGREEMENT_TEXT = `1. 사물함은 신청 시 선택한 이용 기간(6개월 또는 1년) 동안만 사용할 수 있습니다.
-2. 이용 마감일이 지나면 안내된 기간 내에 반드시 물품을 회수해야 하며, 회수하지 않은 물품은 임의로 처리될 수 있습니다.
-3. 사물함 내 물품 분실·파손에 대해 총학생회는 책임지지 않습니다.
-4. 타인에게 사물함을 양도하거나 대여할 수 없습니다.
-5. 위 내용을 확인하지 않아 발생하는 불이익은 신청자 본인이 부담합니다.`
 
 export interface LockerRequestTarget {
   zoneId: string
@@ -61,7 +55,7 @@ export default function LockerRequestModal({ target, onClose, onSuccess }: Locke
     if (target) getLockerSettings().then(setSettings)
   }, [target])
 
-  const endDateFor = (term: '1' | '2') => (term === '1' ? settings?.term1_end_date : settings?.term2_end_date) ?? null
+  const endDateFor = (term: '1' | '2') => computeTermEndDate(term, todayISOKst())
 
   const handleClose = () => {
     onClose()

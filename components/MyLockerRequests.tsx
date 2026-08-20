@@ -5,8 +5,9 @@ import Input from './ui/Input'
 import Button from './ui/Button'
 import Modal from './ui/Modal'
 import { getUserLockerRequests, cancelLockerRequest, getLockerSettings } from '@/lib/actions/lockers'
-import { TERM_LABELS, computeDisplayStatus, termEndDate } from '@/lib/lockers/data'
+import { TERM_LABELS, computeDisplayStatus, requestTermEndDate, addDaysISO, diffDaysISO, todayISOKst } from '@/lib/lockers/data'
 import type { LockerRequest, LockerRequestStatus, LockerSettings } from '@/types'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 
 type DisplayStatus = LockerRequestStatus | 'clearing'
 
@@ -27,6 +28,13 @@ const STATUS_LABEL: Record<DisplayStatus, string> = {
   cancelled: '취소됨',
 }
 
+/** D-day 뱃지 문구 ("D-14" / "D-day" / 이미 지났으면 "마감") */
+function ddayLabel(daysLeft: number): string {
+  if (daysLeft > 0) return `D-${daysLeft}`
+  if (daysLeft === 0) return 'D-day'
+  return '마감'
+}
+
 export default function MyLockerRequests() {
   const [studentId, setStudentId] = useState('')
   const [phone, setPhone] = useState('')
@@ -35,6 +43,16 @@ export default function MyLockerRequests() {
   const [loading, setLoading] = useState(false)
   const [searched, setSearched] = useState(false)
   const [error, setError] = useState('')
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+
+  const toggleExpanded = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   const [cancelModal, setCancelModal] = useState<{ open: boolean; request: LockerRequest | null }>({
     open: false,
@@ -111,23 +129,48 @@ export default function MyLockerRequests() {
             <div className="space-y-4">
               <p className="text-sm text-gray-500">총 {requests.length}건의 신청 내역</p>
               {requests.map((r) => {
-                const display: DisplayStatus = settings ? computeDisplayStatus(r.status, r.term, settings) : r.status
-                const endDate = settings ? termEndDate(r.term, settings) : null
+                const clearingDays = settings?.clearing_period_days ?? 0
+                const display: DisplayStatus = settings ? computeDisplayStatus(r.status, r.term, r.created_at, clearingDays) : r.status
+                const endDate = requestTermEndDate(r.term, r.created_at)
+                const today = todayISOKst()
+
+                let ddayText: string | null = null
+                if (display === 'pending' || display === 'approved') {
+                  ddayText = ddayLabel(diffDaysISO(today, endDate))
+                } else if (display === 'clearing') {
+                  const clearEnd = addDaysISO(endDate, clearingDays)
+                  ddayText = `비우는 중 · 회수 마감까지 ${ddayLabel(diffDaysISO(today, clearEnd))}`
+                }
+
+                const expanded = expandedIds.has(r.id)
+
                 return (
                   <div key={r.id} className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
                     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                       <div className="space-y-1">
-                        <span
-                          className={`inline-flex items-center rounded-full font-medium text-xs px-2.5 py-0.5 ${STATUS_STYLE[display]}`}
-                        >
-                          {STATUS_LABEL[display]}
-                        </span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span
+                            className={`inline-flex items-center rounded-full font-medium text-xs px-2.5 py-0.5 ${STATUS_STYLE[display]}`}
+                          >
+                            {STATUS_LABEL[display]}
+                          </span>
+                          {ddayText && (
+                            <span className="inline-flex items-center rounded-full font-medium text-xs px-2.5 py-0.5 bg-[#003087]/10 text-[#003087]">
+                              {ddayText}
+                            </span>
+                          )}
+                        </div>
                         <div className="text-base font-semibold text-gray-900">
                           {r.zone_label} · {r.block_label} · {r.locker_number}번
                         </div>
                         <div className="text-sm text-gray-500">신청 학기: {TERM_LABELS[r.term] ?? r.term}</div>
-                        {endDate && (display === 'approved' || display === 'clearing') && (
+                        {(display === 'approved' || display === 'clearing') && (
                           <div className="text-sm text-gray-500">📅 이용 마감일: {endDate}</div>
+                        )}
+                        {(display === 'pending' || display === 'approved') && (
+                          <div className="text-sm font-medium text-[#003087] bg-blue-50 border border-blue-200 rounded px-3 py-1.5 mt-2">
+                            📌 마감일({endDate}) 전까지 사물함 안의 모든 짐을 회수해 주세요.
+                          </div>
                         )}
                         {display === 'clearing' && (
                           <div className="text-sm text-orange-700 bg-orange-50 rounded px-3 py-1.5 mt-2">
@@ -142,6 +185,20 @@ export default function MyLockerRequests() {
                         {r.status === 'rejected' && r.admin_memo && (
                           <div className="text-sm text-red-700 bg-red-50 rounded px-3 py-1.5 mt-2">
                             <span className="font-medium">거절 사유:</span> {r.admin_memo}
+                          </div>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => toggleExpanded(r.id)}
+                          className="flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-700 mt-2"
+                        >
+                          {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                          신청 당시 동의한 이용 안내 보기
+                        </button>
+                        {expanded && (
+                          <div className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded p-3 whitespace-pre-line mt-1">
+                            {r.agreement_text_snapshot || '기록이 없습니다.'}
                           </div>
                         )}
                       </div>

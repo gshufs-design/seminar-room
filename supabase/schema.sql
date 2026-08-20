@@ -175,9 +175,12 @@ CREATE TABLE IF NOT EXISTS locker_requests (
   status         VARCHAR(20)  NOT NULL DEFAULT 'pending'
                    CHECK (status IN ('pending', 'approved', 'rejected', 'cancelled', 'expired')),
   admin_memo     TEXT,
+  agreement_text_snapshot TEXT, -- 신청 시점에 실제로 동의받은 "이용 안내" 문구 그대로 보존 (관리자가 나중에 문구를 바꿔도 이 건은 영향받지 않음)
   created_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   updated_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE locker_requests ADD COLUMN IF NOT EXISTS agreement_text_snapshot TEXT;
 
 CREATE INDEX idx_locker_requests_locker ON locker_requests (zone_id, block_id, locker_number);
 CREATE INDEX idx_locker_requests_status ON locker_requests (status);
@@ -219,10 +222,11 @@ ALTER TABLE locker_requests ENABLE ROW LEVEL SECURITY;
 
 -- 공개 화면(사물함 안내)에서는 "이 칸이 비었는지"만 필요하므로,
 -- 개인정보를 뺀 뷰를 anon에게만 SELECT 허용합니다.
--- term(신청 학기)도 같이 노출합니다 — 개인정보가 아니고, 이용 마감일이 지났는지
--- 계산하려면(1학기/2학기 마감일이 다르므로) 어떤 학기로 신청했는지 알아야 합니다.
+-- term(신청 학기)·created_at(신청일)도 같이 노출합니다 — 개인정보가 아니고, 이용 마감일이
+-- 지났는지 계산하려면(마감일이 "신청일 + 학기"로 자동 계산되므로) 언제·어떤 학기로
+-- 신청했는지 알아야 합니다.
 CREATE OR REPLACE VIEW locker_status_public AS
-  SELECT zone_id, block_id, locker_number, status, term
+  SELECT zone_id, block_id, locker_number, status, term, created_at
   FROM locker_requests
   WHERE status IN ('pending', 'approved');
 

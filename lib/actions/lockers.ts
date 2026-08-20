@@ -2,7 +2,7 @@
 
 import { createAdminClient } from '@/lib/supabase/server'
 import { getAdminSession } from '@/lib/auth'
-import { getZone, getBlock, computeDisplayStatus } from '@/lib/lockers/data'
+import { getZone, getBlock, computeDisplayStatus, DEFAULT_AGREEMENT_TEXT } from '@/lib/lockers/data'
 import type { LockerRequest, LockerRequestStatus, LockerStatusEntry, LockerLayoutOverrides, LockerSettings } from '@/types'
 import { revalidatePath } from 'next/cache'
 import { sendNewLockerRequestNotification } from '@/lib/email'
@@ -15,20 +15,19 @@ export async function isAdminLoggedIn(): Promise<boolean> {
 
 const DEFAULT_LOCKER_SETTINGS: LockerSettings = {
   applications_open: false,
-  term1_end_date: null,
-  term2_end_date: null,
   clearing_period_days: 7,
   notice_text: null,
   agreement_text: null,
 }
 
-// 신청 기간(온오프) · 학기별 이용 마감일 · 비우는 기간 · 학생 페이지 공지 문구 · 이용 안내 동의 문구 —
+// 신청 기간(온오프) · 비우는 기간 · 학생 페이지 공지 문구 · 이용 안내 동의 문구 —
 // 공개적으로 읽을 수 있어야 학생 화면에서 보여줄 수 있습니다 (개인정보 아님).
+// (이용 마감일은 신청일 기준으로 자동 계산되므로 여기서 관리하지 않습니다.)
 export async function getLockerSettings(): Promise<LockerSettings> {
   const supabase = createAdminClient()
   const { data, error } = await supabase
     .from('locker_settings')
-    .select('applications_open, term1_end_date, term2_end_date, clearing_period_days, notice_text, agreement_text')
+    .select('applications_open, clearing_period_days, notice_text, agreement_text')
     .eq('id', 1)
     .maybeSingle()
 
@@ -98,13 +97,14 @@ export async function saveLockerLayoutOverrides(
 //  DB의 중복신청 방지 트리거가 여전히 그 칸을 막고 있어서 새 신청이 안 들어가거든요.)
 async function expireStaleApprovedRequests(): Promise<void> {
   const settings = await getLockerSettings()
-  if (!settings.term1_end_date && !settings.term2_end_date) return // 마감일 설정 자체가 없으면 할 일 없음
 
   const supabase = createAdminClient()
-  const { data, error } = await supabase.from('locker_requests').select('id, term').eq('status', 'approved')
+  const { data, error } = await supabase.from('locker_requests').select('id, term, created_at').eq('status', 'approved')
   if (error || !data || data.length === 0) return
 
-  const staleIds = data.filter((r) => computeDisplayStatus('approved', r.term, settings) === 'expired').map((r) => r.id)
+  const staleIds = data
+    .filter((r) => computeDisplayStatus('approved', r.term, r.created_at, settings.clearing_period_days) === 'expired')
+    .map((r) => r.id)
   if (staleIds.length === 0) return
 
   await supabase.from('locker_requests').update({ status: 'expired', updated_at: new Date().toISOString() }).in('id', staleIds)
@@ -115,7 +115,7 @@ export async function getLockerStatuses(): Promise<LockerStatusEntry[]> {
   await expireStaleApprovedRequests()
   const supabase = createAdminClient()
   const [{ data, error }, settings] = await Promise.all([
-    supabase.from('locker_status_public').select('zone_id, block_id, locker_number, status, term'),
+    supabase.from('locker_status_public').select('zone_id, block_id, locker_number, status, term, created_at'),
     getLockerSettings(),
   ])
 
@@ -126,7 +126,7 @@ export async function getLockerStatuses(): Promise<LockerStatusEntry[]> {
 
   const result: LockerStatusEntry[] = []
   for (const row of data ?? []) {
-    const display = computeDisplayStatus(row.status as 'pending' | 'approved', row.term, settings)
+    const display = computeDisplayStatus(row.status as 'pending' | 'approved', row.term, row.created_at, settings.clearing_period_days)
     if (display === 'expired') continue // 비우는 기간까지 지남 → 다시 빈 자리로 취급 (목록에서 제외)
     result.push({ zone_id: row.zone_id, block_id: row.block_id, locker_number: row.locker_number, status: display as LockerStatusEntry['status'] })
   }
@@ -164,6 +164,8 @@ export async function createLockerRequest(
   if (!settings.applications_open) {
     return { success: false, error: '지금은 사물함 신청 기간이 아닙니다.' }
   }
+
+  const agreementSnapshot = settings.agreement_text || DEFAULT_AGREEMENT_TEXT
 
   await expireStaleApprovedRequests() // 마감·비우는 기간이 지난 칸을 먼저 정리해서, 그 자리에 새로 신청할 수 있게 함
 
@@ -244,6 +246,7 @@ export async function createLockerRequest(
       email: email.trim(),
       term,
       status: 'pending',
+      agreement_text_snapshot: agreementSnapshot,
     })
     .select()
     .single()

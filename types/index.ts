@@ -98,6 +98,7 @@ export interface LockerRequest {
   term: '1' | '2'
   status: LockerRequestStatus
   admin_memo: string | null
+  agreement_text_snapshot: string | null
   created_at: string
   updated_at: string
 }
@@ -111,11 +112,10 @@ export interface LockerStatusEntry {
   status: LockerRequestStatus | 'clearing'
 }
 
-// 관리자가 설정하는 사물함 신청/이용 기간
+// 관리자가 설정하는 사물함 신청 기간
+// (이용 마감일은 더 이상 관리자가 입력하지 않고, 신청일 기준으로 자동 계산됩니다 — lib/lockers/data.ts의 computeTermEndDate)
 export interface LockerSettings {
   applications_open: boolean
-  term1_end_date: string | null // 'YYYY-MM-DD'
-  term2_end_date: string | null
   clearing_period_days: number
   notice_text: string | null // 학생 페이지에 보여줄 공지 문구 (관리자가 직접 수정)
   agreement_text: string | null // 신청 완료 직전 "사물함 이용 안내 동의"에 보여줄 문구 (관리자가 직접 수정)
