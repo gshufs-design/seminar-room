@@ -10,7 +10,9 @@ export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false)
 
   const navLinks = [
-    { href: '/', label: '예약 현황' },
+    { href: '/', label: '홈' },
+    { href: '/seminar', label: '세미나실 예약' },
+    { href: '/lockers', label: '사물함 예약' },
     { href: '/my-reservations', label: '내 예약 조회' },
   ]
 
@@ -23,7 +25,7 @@ export default function Header() {
             <Building2 className="w-7 h-7 text-white" />
             <div className="leading-tight">
               <div className="text-base font-bold tracking-tight">한국외국어대학교</div>
-              <div className="text-xs text-blue-200 font-medium">대학원 세미나실 예약 시스템</div>
+              <div className="text-xs text-blue-200 font-medium">일반대학원 총학생회 예약 시스템</div>
             </div>
           </Link>
 

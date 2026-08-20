@@ -4,7 +4,7 @@ import AdminNav from './AdminNav'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: '관리자 | 세미나실 예약 시스템',
+  title: '관리자 | 총학생회 예약 시스템',
 }
 
 export default async function DashboardLayout({

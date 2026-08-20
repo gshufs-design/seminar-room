@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Building2, LayoutDashboard, BarChart2, LogOut, Menu, X } from 'lucide-react'
+import { Building2, LayoutDashboard, BarChart2, LogOut, Menu, X, Archive } from 'lucide-react'
 import { useState } from 'react'
 import { adminLogout } from '@/lib/actions/admin'
 
@@ -15,7 +15,8 @@ export default function AdminNav({ username }: AdminNavProps) {
   const [menuOpen, setMenuOpen] = useState(false)
 
   const navLinks = [
-    { href: '/admin', label: '예약 관리', icon: LayoutDashboard },
+    { href: '/admin', label: '세미나실 예약', icon: LayoutDashboard },
+    { href: '/admin/lockers', label: '사물함 신청', icon: Archive },
     { href: '/admin/stats', label: '통계', icon: BarChart2 },
   ]
 
@@ -30,7 +31,7 @@ export default function AdminNav({ username }: AdminNavProps) {
           <div className="flex items-center gap-3">
             <Building2 className="w-6 h-6" />
             <div className="leading-tight">
-              <div className="text-sm font-bold">세미나실 예약 관리자</div>
+              <div className="text-sm font-bold">총학생회 예약 관리자</div>
               <div className="text-xs text-blue-200">{username}</div>
             </div>
           </div>
