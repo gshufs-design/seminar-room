@@ -35,6 +35,7 @@ export interface RoomSettings {
   id: number
   room_password: string
   notification_email: string | null
+  notice_text: string | null
   updated_at: string
 }
 

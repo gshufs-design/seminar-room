@@ -6,6 +6,19 @@ import type { Reservation, ReservationStatus } from '@/types'
 import { revalidatePath } from 'next/cache'
 import { sendNewReservationNotification } from '@/lib/email'
 
+// 세미나실 예약 화면의 "이용 안내" 문구 (관리자가 직접 수정, 비어 있으면 기본 문구 사용) — 개인정보 아님, 공개적으로 읽을 수 있어야 함
+export async function getRoomNoticeText(): Promise<string | null> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase
+    .from('room_settings')
+    .select('notice_text')
+    .eq('id', 1)
+    .maybeSingle()
+
+  if (error || !data) return null
+  return data.notice_text
+}
+
 export async function getMonthReservations(year: number, month: number): Promise<Reservation[]> {
   const supabase = createAdminClient()
   const startDate = `${year}-${String(month).padStart(2, '0')}-01`

@@ -8,10 +8,11 @@ import Calendar from '@/components/Calendar'
 import TimeSlotView from '@/components/TimeSlotView'
 import PasswordManager from '@/components/PasswordManager'
 import EmailManager from '@/components/EmailManager'
+import NoticeManager from '@/components/NoticeManager'
 import type { Reservation } from '@/types'
-import { CalendarDays, List, KeyRound, Mail } from 'lucide-react'
+import { CalendarDays, List, KeyRound, Mail, Info } from 'lucide-react'
 
-type Tab = 'list' | 'calendar' | 'password' | 'email'
+type Tab = 'list' | 'calendar' | 'password' | 'email' | 'notice'
 
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<Tab>('list')
@@ -19,6 +20,7 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true)
   const [roomPassword, setRoomPassword] = useState('')
   const [notificationEmail, setNotificationEmail] = useState<string | null>(null)
+  const [noticeText, setNoticeText] = useState<string | null>(null)
   const [resendConfigured, setResendConfigured] = useState(false)
 
   const today = new Date()
@@ -40,6 +42,7 @@ export default function AdminPage() {
     if (settings) {
       setRoomPassword(settings.room_password)
       setNotificationEmail(settings.notification_email ?? null)
+      setNoticeText(settings.notice_text ?? null)
     }
     setResendConfigured(configured)
   }, [])
@@ -73,6 +76,7 @@ export default function AdminPage() {
     { id: 'calendar', label: '캘린더', icon: <CalendarDays className="w-4 h-4" /> },
     { id: 'password', label: '비밀번호 관리', icon: <KeyRound className="w-4 h-4" /> },
     { id: 'email', label: '알림 이메일', icon: <Mail className="w-4 h-4" /> },
+    { id: 'notice', label: '이용 안내', icon: <Info className="w-4 h-4" /> },
   ]
 
   return (
@@ -168,6 +172,10 @@ export default function AdminPage() {
 
       {activeTab === 'email' && (
         <EmailManager currentEmail={notificationEmail} resendConfigured={resendConfigured} />
+      )}
+
+      {activeTab === 'notice' && (
+        <NoticeManager currentNoticeText={noticeText} />
       )}
     </div>
   )

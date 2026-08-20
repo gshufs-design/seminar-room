@@ -147,14 +147,14 @@ export async function updateAdminMemo(
   return { success: true }
 }
 
-export async function getRoomSettings(): Promise<{ room_password: string; notification_email: string | null } | null> {
+export async function getRoomSettings(): Promise<{ room_password: string; notification_email: string | null; notice_text: string | null } | null> {
   const session = await getAdminSession()
   if (!session) return null
 
   const supabase = createAdminClient()
   const { data, error } = await supabase
     .from('room_settings')
-    .select('room_password, notification_email')
+    .select('room_password, notification_email, notice_text')
     .eq('id', 1)
     .single()
 
@@ -185,6 +185,25 @@ export async function updateNotificationEmail(
   if (error) return { success: false, error: '저장 중 오류가 발생했습니다.' }
 
   revalidatePath('/admin')
+  return { success: true }
+}
+
+export async function updateRoomNoticeText(
+  text: string | null
+): Promise<{ success: boolean; error?: string }> {
+  const session = await getAdminSession()
+  if (!session) return { success: false, error: '권한이 없습니다.' }
+
+  const supabase = createAdminClient()
+  const { error } = await supabase
+    .from('room_settings')
+    .update({ notice_text: text?.trim() || null, updated_at: new Date().toISOString() })
+    .eq('id', 1)
+
+  if (error) return { success: false, error: '저장 중 오류가 발생했습니다.' }
+
+  revalidatePath('/admin')
+  revalidatePath('/seminar')
   return { success: true }
 }
 

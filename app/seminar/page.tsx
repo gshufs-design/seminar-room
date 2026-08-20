@@ -5,7 +5,7 @@ import Header from '@/components/Header'
 import Calendar from '@/components/Calendar'
 import TimeSlotView from '@/components/TimeSlotView'
 import ReservationForm from '@/components/ReservationForm'
-import { getMonthReservations, getDayReservations } from '@/lib/actions/reservations'
+import { getMonthReservations, getDayReservations, getRoomNoticeText } from '@/lib/actions/reservations'
 import { canReserveTime, padHour } from '@/lib/utils'
 import type { Reservation } from '@/types'
 import { CalendarDays, Info } from 'lucide-react'
@@ -22,6 +22,7 @@ export default function HomePage() {
   const [formOpen, setFormOpen] = useState(false)
   const [loadingMonth, setLoadingMonth] = useState(true)
   const [loadingDay, setLoadingDay] = useState(false)
+  const [noticeText, setNoticeText] = useState<string | null>(null)
 
   const loadMonth = useCallback(async (y: number, m: number) => {
     setLoadingMonth(true)
@@ -33,6 +34,10 @@ export default function HomePage() {
   useEffect(() => {
     loadMonth(year, month)
   }, [year, month, loadMonth])
+
+  useEffect(() => {
+    getRoomNoticeText().then(setNoticeText)
+  }, [])
 
   const handleMonthChange = (y: number, m: number) => {
     setYear(y)
@@ -105,8 +110,14 @@ export default function HomePage() {
           <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
           <div className="space-y-0.5">
             <p className="font-medium">이용 안내</p>
-            <p>운영 시간: 07:00 ~ 23:00 / 최소 1시간, 최대 3시간 단위로 예약 가능합니다.</p>
-            <p>예약은 시작 시각 기준 24시간 이전에만 신청할 수 있습니다.</p>
+            {noticeText ? (
+              <p className="whitespace-pre-line">{noticeText}</p>
+            ) : (
+              <>
+                <p>운영 시간: 07:00 ~ 23:00 / 최소 1시간, 최대 3시간 단위로 예약 가능합니다.</p>
+                <p>예약은 시작 시각 기준 24시간 이전에만 신청할 수 있습니다.</p>
+              </>
+            )}
           </div>
         </div>
 
