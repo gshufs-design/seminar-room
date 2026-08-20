@@ -128,6 +128,23 @@ export async function adminCancelReservation(
   return { success: true }
 }
 
+export async function deleteReservation(reservationId: string): Promise<{ success: boolean; error?: string }> {
+  const session = await getAdminSession()
+  if (!session) return { success: false, error: '권한이 없습니다.' }
+
+  const supabase = createAdminClient()
+  const { error } = await supabase.from('reservations').delete().eq('id', reservationId)
+
+  if (error) {
+    console.error('deleteReservation error:', error)
+    return { success: false, error: '삭제 중 오류가 발생했습니다.' }
+  }
+
+  revalidatePath('/admin')
+  revalidatePath('/')
+  return { success: true }
+}
+
 export async function updateAdminMemo(
   reservationId: string,
   admin_memo: string

@@ -423,6 +423,23 @@ export async function getAllLockerRequests(status?: LockerRequestStatus | 'all')
   return data ?? []
 }
 
+export async function deleteLockerRequest(requestId: string): Promise<{ success: boolean; error?: string }> {
+  const session = await getAdminSession()
+  if (!session) return { success: false, error: '권한이 없습니다.' }
+
+  const supabase = createAdminClient()
+  const { error } = await supabase.from('locker_requests').delete().eq('id', requestId)
+
+  if (error) {
+    console.error('deleteLockerRequest error:', error)
+    return { success: false, error: '삭제 중 오류가 발생했습니다.' }
+  }
+
+  revalidatePath('/admin/lockers')
+  revalidatePath('/lockers')
+  return { success: true }
+}
+
 export async function updateLockerRequestStatus(
   requestId: string,
   status: LockerRequestStatus,

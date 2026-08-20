@@ -145,12 +145,16 @@ export function toKstDateISO(isoTimestamp: string): string {
   return kst.toISOString().slice(0, 10)
 }
 
-/** 해당 연/월의 "첫째 주 금요일" 날짜를 'YYYY-MM-DD'로 */
+/**
+ * 해당 연/월의 "첫째 주 금요일" 날짜를 'YYYY-MM-DD'로.
+ * 단, 1일이 하필 금요일이면 그 다음 주 금요일(1일 + 7일)을 반환합니다
+ * (한 학기를 시작하자마자 그 주에 바로 마감일이 잡히는 걸 피하기 위함).
+ */
 export function firstFridayOfMonth(year: number, month: number): string {
   const d = new Date(Date.UTC(year, month - 1, 1))
   const dow = d.getUTCDay() // 0=일 ... 5=금 ... 6=토
-  const diff = (5 - dow + 7) % 7
-  d.setUTCDate(d.getUTCDate() + diff)
+  const diff = (5 - dow + 7) % 7 // 1일이 금요일이면 0
+  d.setUTCDate(d.getUTCDate() + diff + (diff === 0 ? 7 : 0))
   return d.toISOString().slice(0, 10)
 }
 

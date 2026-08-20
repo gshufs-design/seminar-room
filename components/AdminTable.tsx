@@ -1,13 +1,13 @@
 'use client'
 
 import { useState } from 'react'
-import { updateReservationStatus, updateAdminMemo, adminCancelReservation } from '@/lib/actions/admin'
+import { updateReservationStatus, updateAdminMemo, adminCancelReservation, deleteReservation } from '@/lib/actions/admin'
 import Badge from './ui/Badge'
 import Button from './ui/Button'
 import Modal from './ui/Modal'
 import type { Reservation, ReservationStatus } from '@/types'
 import { formatDate, padHour } from '@/lib/utils'
-import { Check, X, FileText, Search, Ban } from 'lucide-react'
+import { Check, X, FileText, Search, Ban, Trash2 } from 'lucide-react'
 
 interface AdminTableProps {
   reservations: Reservation[]
@@ -73,6 +73,16 @@ export default function AdminTable({ reservations, onRefresh }: AdminTableProps)
     } else {
       setCancelError(result.error ?? '처리 중 오류가 발생했습니다.')
     }
+  }
+
+  const handleDelete = async (reservation: Reservation) => {
+    if (!window.confirm('정말 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) return
+    const result = await deleteReservation(reservation.id)
+    if (!result.success) {
+      alert(result.error ?? '삭제 중 오류가 발생했습니다.')
+      return
+    }
+    onRefresh()
   }
 
   const handleMemoSave = async () => {
@@ -207,6 +217,13 @@ export default function AdminTable({ reservations, onRefresh }: AdminTableProps)
                           title="메모"
                         >
                           <FileText className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(r)}
+                          className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-600 transition-colors"
+                          title="삭제"
+                        >
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     </td>

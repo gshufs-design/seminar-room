@@ -1,29 +1,39 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { getAllLockerRequests, updateLockerRequestStatus } from '@/lib/actions/lockers'
-import { TERM_LABELS, formatPhone, requestTermEndDate, todayISOKst } from '@/lib/lockers/data'
-import type { LockerRequest, LockerRequestStatus } from '@/types'
-import { Check, X, RotateCcw, ClipboardList, MapPin, Settings, Search, Download } from 'lucide-react'
+import { getAllLockerRequests, updateLockerRequestStatus, deleteLockerRequest, getLockerSettings } from '@/lib/actions/lockers'
+import { TERM_LABELS, formatPhone, requestTermEndDate, todayISOKst, computeDisplayStatus, diffDaysISO, addDaysISO } from '@/lib/lockers/data'
+import type { LockerRequest, LockerRequestStatus, LockerSettings } from '@/types'
+import { Check, X, RotateCcw, ClipboardList, MapPin, Settings, Search, Download, Trash2 } from 'lucide-react'
 import AdminLockerLayoutEditor from '@/components/lockers/AdminLockerLayoutEditor'
 import AdminLockerSettingsPanel from '@/components/lockers/AdminLockerSettingsPanel'
 
-type Filter = LockerRequestStatus | 'all'
+type DisplayStatus = LockerRequestStatus | 'clearing'
+type Filter = LockerRequestStatus | 'all' | 'urgent'
 type PageView = 'requests' | 'layout' | 'settings'
 
-const STATUS_STYLE: Record<LockerRequestStatus, string> = {
+const STATUS_STYLE: Record<DisplayStatus, string> = {
   pending: 'bg-yellow-100 text-yellow-800 border border-yellow-300',
   approved: 'bg-blue-100 text-blue-900 border border-blue-300',
+  clearing: 'bg-orange-100 text-orange-700 border border-orange-300',
   rejected: 'bg-red-100 text-red-700 border border-red-300',
   cancelled: 'bg-gray-100 text-gray-600 border border-gray-300',
   expired: 'bg-orange-100 text-orange-700 border border-orange-300',
 }
-const STATUS_LABEL: Record<LockerRequestStatus, string> = {
+const STATUS_LABEL: Record<DisplayStatus, string> = {
   pending: '대기중',
   approved: '승인됨',
+  clearing: '비우는 중',
   rejected: '거절됨',
   cancelled: '본인 취소',
   expired: '이용 만료',
+}
+
+/** D-day 뱃지 문구 ("D-14" / "D-day" / 이미 지났으면 "마감") */
+function ddayLabel(daysLeft: number): string {
+  if (daysLeft > 0) return `D-${daysLeft}`
+  if (daysLeft === 0) return 'D-day'
+  return '마감'
 }
 
 function toCsv(rows: LockerRequest[]): string {
@@ -52,6 +62,7 @@ function toCsv(rows: LockerRequest[]): string {
 export default function AdminLockersPage() {
   const [pageView, setPageView] = useState<PageView>('requests')
   const [requests, setRequests] = useState<LockerRequest[]>([])
+  const [settings, setSettings] = useState<LockerSettings | null>(null)
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<Filter>('pending')
   const [search, setSearch] = useState('')
@@ -59,14 +70,22 @@ export default function AdminLockersPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const data = await getAllLockerRequests('all')
+    const [data, settingsData] = await Promise.all([getAllLockerRequests('all'), getLockerSettings()])
     setRequests(data)
+    setSettings(settingsData)
     setLoading(false)
   }, [])
 
   useEffect(() => {
     load()
   }, [load])
+
+  const clearingDays = settings?.clearing_period_days ?? 7
+
+  const displayStatusOf = useCallback(
+    (r: LockerRequest): DisplayStatus => computeDisplayStatus(r.status, r.term, r.created_at, clearingDays),
+    [clearingDays]
+  )
 
   const handleUpdate = async (id: string, status: LockerRequestStatus) => {
     setBusyId(id)
@@ -79,14 +98,42 @@ export default function AdminLockersPage() {
     setBusyId(null)
   }
 
+  const handleDelete = async (r: LockerRequest) => {
+    if (!window.confirm('정말 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) return
+    setBusyId(r.id)
+    const result = await deleteLockerRequest(r.id)
+    if (!result.success) {
+      alert(result.error ?? '삭제 중 오류가 발생했습니다.')
+    } else {
+      await load()
+    }
+    setBusyId(null)
+  }
+
+  const today = todayISOKst()
+
   const counts = {
     pending: requests.filter((r) => r.status === 'pending').length,
     approved: requests.filter((r) => r.status === 'approved').length,
     rejected: requests.filter((r) => r.status === 'rejected').length,
     expired: requests.filter((r) => r.status === 'expired').length,
+    urgent: requests.filter((r) => {
+      if (displayStatusOf(r) !== 'approved') return false
+      const endDate = requestTermEndDate(r.term, r.created_at)
+      return diffDaysISO(today, endDate) <= 7
+    }).length,
   }
 
-  const statusFiltered = filter === 'all' ? requests : requests.filter((r) => r.status === filter)
+  const statusFiltered =
+    filter === 'all'
+      ? requests
+      : filter === 'urgent'
+      ? requests.filter((r) => {
+          if (displayStatusOf(r) !== 'approved') return false
+          const endDate = requestTermEndDate(r.term, r.created_at)
+          return diffDaysISO(today, endDate) <= 7
+        })
+      : requests.filter((r) => r.status === filter)
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -102,6 +149,7 @@ export default function AdminLockersPage() {
   const tabs: { id: Filter; label: string }[] = [
     { id: 'pending', label: `대기중 ${counts.pending}` },
     { id: 'approved', label: `승인됨 ${counts.approved}` },
+    { id: 'urgent', label: `마감 임박 ${counts.urgent}` },
     { id: 'expired', label: `이용 만료 ${counts.expired}` },
     { id: 'rejected', label: `거절됨 ${counts.rejected}` },
     { id: 'all', label: '전체' },
@@ -230,12 +278,21 @@ export default function AdminLockersPage() {
                     <th className="text-left px-4 py-3 font-medium">연락처</th>
                     <th className="text-left px-4 py-3 font-medium">학기</th>
                     <th className="text-left px-4 py-3 font-medium">상태</th>
+                    <th className="text-left px-4 py-3 font-medium">D-day</th>
                     <th className="text-right px-4 py-3 font-medium">처리</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {filtered.map((r) => {
                     const endDate = requestTermEndDate(r.term, r.created_at)
+                    const display = displayStatusOf(r)
+                    let ddayText: string | null = null
+                    if (display === 'pending' || display === 'approved') {
+                      ddayText = ddayLabel(diffDaysISO(today, endDate))
+                    } else if (display === 'clearing') {
+                      const clearEnd = addDaysISO(endDate, clearingDays)
+                      ddayText = ddayLabel(diffDaysISO(today, clearEnd))
+                    }
                     return (
                       <tr key={r.id}>
                         <td className="px-4 py-3 align-top">
@@ -259,40 +316,53 @@ export default function AdminLockersPage() {
                           <p className="text-xs text-gray-500">📅 {endDate}까지</p>
                         </td>
                         <td className="px-4 py-3 align-top">
-                          <span className={`inline-flex items-center rounded-full font-medium text-xs px-2.5 py-0.5 ${STATUS_STYLE[r.status]}`}>
-                            {STATUS_LABEL[r.status]}
+                          <span className={`inline-flex items-center rounded-full font-medium text-xs px-2.5 py-0.5 ${STATUS_STYLE[display]}`}>
+                            {STATUS_LABEL[display]}
                           </span>
                         </td>
+                        <td className="px-4 py-3 align-top text-gray-700">
+                          {ddayText ?? '-'}
+                        </td>
                         <td className="px-4 py-3 align-top text-right">
-                          {r.status === 'pending' ? (
-                            <div className="flex justify-end gap-1.5">
+                          <div className="flex justify-end items-center gap-1.5">
+                            {r.status === 'pending' ? (
+                              <>
+                                <button
+                                  disabled={busyId === r.id}
+                                  onClick={() => handleUpdate(r.id, 'approved')}
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded text-xs font-medium bg-[#003087] text-white hover:bg-[#1e3d7d] disabled:opacity-50"
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                  승인
+                                </button>
+                                <button
+                                  disabled={busyId === r.id}
+                                  onClick={() => handleUpdate(r.id, 'rejected')}
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded text-xs font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                  거절
+                                </button>
+                              </>
+                            ) : (
                               <button
                                 disabled={busyId === r.id}
-                                onClick={() => handleUpdate(r.id, 'approved')}
-                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded text-xs font-medium bg-[#003087] text-white hover:bg-[#1e3d7d] disabled:opacity-50"
+                                onClick={() => handleUpdate(r.id, 'pending')}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded text-xs font-medium text-gray-500 hover:text-gray-700 disabled:opacity-50"
                               >
-                                <Check className="w-3.5 h-3.5" />
-                                승인
+                                <RotateCcw className="w-3.5 h-3.5" />
+                                대기중으로
                               </button>
-                              <button
-                                disabled={busyId === r.id}
-                                onClick={() => handleUpdate(r.id, 'rejected')}
-                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded text-xs font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
-                              >
-                                <X className="w-3.5 h-3.5" />
-                                거절
-                              </button>
-                            </div>
-                          ) : (
+                            )}
                             <button
                               disabled={busyId === r.id}
-                              onClick={() => handleUpdate(r.id, 'pending')}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded text-xs font-medium text-gray-500 hover:text-gray-700 disabled:opacity-50"
+                              onClick={() => handleDelete(r)}
+                              className="p-1.5 rounded text-gray-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                              title="삭제"
                             >
-                              <RotateCcw className="w-3.5 h-3.5" />
-                              대기중으로
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
-                          )}
+                          </div>
                         </td>
                       </tr>
                     )
