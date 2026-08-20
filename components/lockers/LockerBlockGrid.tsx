@@ -18,7 +18,7 @@ function statusOf(
   zoneId: string,
   blockId: string,
   number: number
-): LockerRequestStatus | 'available' {
+): LockerRequestStatus | 'available' | 'clearing' {
   const entry = statuses.find(
     (s) => s.zone_id === zoneId && s.block_id === blockId && s.locker_number === number
   )
