@@ -7,13 +7,13 @@ export default function HomePage() {
     {
       href: '/seminar',
       title: '세미나실 예약',
-      description: '날짜와 시간을 선택해 대학원 세미나실을 예약합니다.',
+      description: '날짜와 시간을 선택해 세미나실을 예약합니다.',
       icon: CalendarDays,
     },
     {
       href: '/lockers',
       title: '사물함 예약',
-      description: '로비·열람실 앞 사물함 중 원하는 칸을 신청합니다.',
+      description: '3층 로비 · 열람실 앞 사물함을 신청합니다.',
       icon: Archive,
     },
   ]
@@ -39,7 +39,7 @@ export default function HomePage() {
               </div>
               <div>
                 <h2 className="text-lg font-bold text-gray-900">{title}</h2>
-                <p className="text-sm text-gray-500 mt-1">{description}</p>
+                <p className="text-sm text-gray-500 mt-1 whitespace-nowrap">{description}</p>
               </div>
               <span className="mt-auto flex items-center gap-1 text-sm font-medium text-[#003087] group-hover:gap-2 transition-all">
                 바로가기 <ArrowRight className="w-4 h-4" />

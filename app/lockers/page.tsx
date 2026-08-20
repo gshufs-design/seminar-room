@@ -48,8 +48,8 @@ export default function LockersPage() {
             <h1 className="text-2xl font-bold text-gray-900">
               {selectedZone ? `${selectedZone.label} 사물함` : '사물함 신청'}
             </h1>
-            <p className="text-sm text-gray-500 mt-1">
-              {selectedZone ? selectedZone.description : '도면에서 구역을 선택하고, 원하는 칸을 눌러 신청해 주시기 바랍니다.'}
+            <p className="text-sm text-gray-500 mt-1 whitespace-nowrap">
+              {selectedZone ? selectedZone.description : '그림에서 구역을 선택한 후, 원하는 칸을 눌러 신청해 주세요.'}
             </p>
           </div>
           {selectedZone && (
