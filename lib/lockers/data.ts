@@ -184,6 +184,13 @@ export function requestTermEndDate(term: string, createdAt: string): string {
   return computeTermEndDate(term === '2' ? '2' : '1', toKstDateISO(createdAt))
 }
 
+/** 마감일('YYYY-MM-DD', 3월 또는 9월)을 "2027년 1학기"/"2027년 2학기" 같은 라벨로 */
+export function termEndLabel(endDateISO: string): string {
+  const year = endDateISO.slice(0, 4)
+  const month = Number(endDateISO.slice(5, 7))
+  return month === 3 ? `${year}년 1학기` : `${year}년 2학기`
+}
+
 /**
  * 승인된 신청 건의 "실제 표시 상태"를 계산합니다.
  * - 마감일 전: 'approved' (사용 중)

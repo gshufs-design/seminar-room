@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { getAllLockerRequests, updateLockerRequestStatus, deleteLockerRequest, getLockerSettings } from '@/lib/actions/lockers'
-import { TERM_LABELS, formatPhone, requestTermEndDate, todayISOKst, computeDisplayStatus, diffDaysISO, addDaysISO } from '@/lib/lockers/data'
+import { TERM_LABELS, formatPhone, requestTermEndDate, todayISOKst, computeDisplayStatus, diffDaysISO, addDaysISO, termEndLabel } from '@/lib/lockers/data'
 import type { LockerRequest, LockerRequestStatus, LockerSettings } from '@/types'
 import { Check, X, RotateCcw, ClipboardList, MapPin, Settings, Search, Download, Trash2 } from 'lucide-react'
 import AdminLockerLayoutEditor from '@/components/lockers/AdminLockerLayoutEditor'
@@ -65,6 +65,7 @@ export default function AdminLockersPage() {
   const [settings, setSettings] = useState<LockerSettings | null>(null)
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<Filter>('pending')
+  const [expiryFilter, setExpiryFilter] = useState<string>('all')
   const [search, setSearch] = useState('')
   const [busyId, setBusyId] = useState<string | null>(null)
 
@@ -124,6 +125,13 @@ export default function AdminLockersPage() {
     }).length,
   }
 
+  const expiredRequests = useMemo(() => requests.filter((r) => r.status === 'expired'), [requests])
+
+  const expiryLabels = useMemo(
+    () => Array.from(new Set(expiredRequests.map((r) => termEndLabel(requestTermEndDate(r.term, r.created_at))))).sort(),
+    [expiredRequests]
+  )
+
   const statusFiltered =
     filter === 'all'
       ? requests
@@ -133,6 +141,10 @@ export default function AdminLockersPage() {
           const endDate = requestTermEndDate(r.term, r.created_at)
           return diffDaysISO(today, endDate) <= 7
         })
+      : filter === 'expired'
+      ? expiredRequests.filter(
+          (r) => expiryFilter === 'all' || termEndLabel(requestTermEndDate(r.term, r.created_at)) === expiryFilter
+        )
       : requests.filter((r) => r.status === filter)
 
   const filtered = useMemo(() => {
@@ -254,7 +266,7 @@ export default function AdminLockersPage() {
             {tabs.map(({ id, label }) => (
               <button
                 key={id}
-                onClick={() => setFilter(id)}
+                onClick={() => { setFilter(id); if (id !== 'expired') setExpiryFilter('all') }}
                 className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors -mb-px ${
                   filter === id ? 'border-[#003087] text-[#003087]' : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
@@ -263,6 +275,35 @@ export default function AdminLockersPage() {
               </button>
             ))}
           </div>
+
+          {filter === 'expired' && expiryLabels.length > 0 && (
+            <div className="flex items-center gap-1.5 flex-wrap mb-4">
+              <span className="text-xs text-gray-500 mr-1">만료 학기</span>
+              <button
+                onClick={() => setExpiryFilter('all')}
+                className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                  expiryFilter === 'all'
+                    ? 'bg-[#003087] text-white border-[#003087]'
+                    : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                전체
+              </button>
+              {expiryLabels.map((label) => (
+                <button
+                  key={label}
+                  onClick={() => setExpiryFilter(label)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                    expiryFilter === label
+                      ? 'bg-[#003087] text-white border-[#003087]'
+                      : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
 
           {loading ? (
             <div className="text-center py-20 text-gray-400">불러오는 중입니다...</div>
@@ -278,7 +319,11 @@ export default function AdminLockersPage() {
                     <th className="text-left px-4 py-3 font-medium">연락처</th>
                     <th className="text-left px-4 py-3 font-medium">학기</th>
                     <th className="text-left px-4 py-3 font-medium">상태</th>
-                    <th className="text-left px-4 py-3 font-medium">D-day</th>
+                    {filter === 'expired' ? (
+                      <th className="text-left px-4 py-3 font-medium">만료 학기</th>
+                    ) : (
+                      <th className="text-left px-4 py-3 font-medium">D-day</th>
+                    )}
                     <th className="text-right px-4 py-3 font-medium">처리</th>
                   </tr>
                 </thead>
@@ -320,9 +365,11 @@ export default function AdminLockersPage() {
                             {STATUS_LABEL[display]}
                           </span>
                         </td>
-                        <td className="px-4 py-3 align-top text-gray-700">
-                          {ddayText ?? '-'}
-                        </td>
+                        {filter === 'expired' ? (
+                          <td className="px-4 py-3 align-top text-gray-700">{termEndLabel(endDate)}</td>
+                        ) : (
+                          <td className="px-4 py-3 align-top text-gray-700">{ddayText ?? '-'}</td>
+                        )}
                         <td className="px-4 py-3 align-top text-right">
                           <div className="flex justify-end items-center gap-1.5">
                             {r.status === 'pending' ? (
