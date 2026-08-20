@@ -67,8 +67,8 @@ export default function LockersPage() {
           <div className="flex items-start gap-2 bg-orange-50 border border-orange-200 rounded-lg p-4 mb-6 text-sm text-orange-800">
             <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
             <div className="space-y-0.5">
-              <p className="font-medium">지금은 사물함 신청 기간이 아닙니다.</p>
-              <p>도면은 둘러보실 수 있지만, 신청은 다음 접수 기간에 다시 열립니다.</p>
+              <p className="font-medium">현재는 사물함 신청 기간이 아닙니다.</p>
+              <p>그림은 자유롭게 둘러보실 수 있으며, 신청은 해당 접수 기간에 열립니다.</p>
               {settings.notice_text && <p className="whitespace-pre-line pt-1">{settings.notice_text}</p>}
             </div>
           </div>
