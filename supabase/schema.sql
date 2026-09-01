@@ -277,9 +277,9 @@ ALTER TABLE locker_settings ENABLE ROW LEVEL SECURITY;
 -- =============================================
 -- 7. warnings 테이블 (세미나실 이용자 경고)
 -- =============================================
--- 이용자 매칭은 학번(student_id)을 기본 키로 사용하고, 이름·전화번호(신청자) 또는
--- 이름·학과(동반 이용자 — 동반 이용자 입력폼엔 전화번호가 없음)로 교차 검증합니다.
--- 동일 학과 동명이인이 있어도 학번까지 같이 맞아야 매칭되므로 오매칭을 방지합니다.
+-- 이용자 매칭 기준: 학번(student_id) 또는 전화번호(phone) 중 하나라도 일치하면 동일 인물로 봅니다
+-- (이름·학과는 표기가 다를 수 있어 매칭 기준에서 제외, 참고 표시용으로만 사용 — lib/identity.ts 참고).
+-- 이 기준은 9시간 예약 제한 판정에도 동일하게 적용됩니다.
 CREATE TABLE IF NOT EXISTS warnings (
   id           UUID         DEFAULT gen_random_uuid() PRIMARY KEY,
   student_id   VARCHAR(20)  NOT NULL,
@@ -294,3 +294,46 @@ CREATE INDEX idx_warnings_identity ON warnings (student_id, name, phone);
 
 ALTER TABLE warnings ENABLE ROW LEVEL SECURITY;
 -- 정책 없음 = anon 접근 불가, service_role(서버 액션)만 가능 (admins 테이블과 동일 패턴)
+
+-- =============================================
+-- 8. 1인당 9시간 예약 제한 (DB 레벨 이중 방지)
+-- =============================================
+-- 서버 액션(createReservation)에서도 신청 전에 9시간 제한을 확인하지만, "확인 후 저장" 사이에
+-- 시간차가 있어 거의 동시에 여러 건이 접수되면 이론적으로 9시간을 넘겨 저장될 수 있다.
+-- check_reservation_overlap 트리거(중복 예약 방지)와 동일한 이유로, 여기서도 DB 레벨에서
+-- 최종적으로 한 번 더 막는다. 이미 끝난 예약은 제외하고(지금 시각 이후에 끝나는 것만 합산한다).
+--
+-- 신규 예약 생성(INSERT)에만 건다 — 이미 저장된(어쩌다 9시간을 넘겨버린) 예약을 관리자가 나중에
+-- 승인/거절/메모 수정(UPDATE)하려는 것까지 막아버리면, 문제를 해결하려는 조작 자체가 막혀버리는
+-- 역효과가 나기 때문이다. 취소/거절은 이 트리거와 무관하게 항상 가능하다.
+CREATE OR REPLACE FUNCTION check_reservation_hours_limit()
+RETURNS TRIGGER AS $$
+DECLARE
+  total_hours NUMERIC;
+BEGIN
+  IF NEW.status NOT IN ('pending', 'approved') THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT COALESCE(SUM(EXTRACT(EPOCH FROM (r.end_time - r.start_time)) / 3600), 0)
+  INTO total_hours
+  FROM reservations r
+  WHERE r.status IN ('pending', 'approved')
+    AND r.id <> COALESCE(NEW.id, '00000000-0000-0000-0000-000000000000'::UUID)
+    AND (r.student_id = NEW.student_id OR r.phone = NEW.phone)
+    AND (r.reservation_date + r.end_time) > (NOW() AT TIME ZONE 'Asia/Seoul');
+
+  total_hours := total_hours + EXTRACT(EPOCH FROM (NEW.end_time - NEW.start_time)) / 3600;
+
+  IF total_hours > 9 THEN
+    RAISE EXCEPTION 'Reservation hour limit exceeded: % hours (max 9)', total_hours;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_check_hours_limit
+  BEFORE INSERT ON reservations
+  FOR EACH ROW
+  EXECUTE FUNCTION check_reservation_hours_limit();

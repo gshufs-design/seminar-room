@@ -1,29 +1,26 @@
 import type { createAdminClient } from '@/lib/supabase/server'
+import { samePersonOrFilter } from '@/lib/identity'
 
 export const RESERVATION_HOURS_LIMIT = 9
 
 export interface ReservationHoursMatch {
   student_id: string
-  name?: string
   phone?: string
 }
 
 // "지금 이 순간 기준으로 아직 끝나지 않은" pending/approved 예약 시간의 합.
 // 월/기간 같은 별도 구간 개념 없이, 호출 시점마다 처음부터 다시 계산한다 — 예약 시간이
 // 지나거나 취소되면 그만큼 자동으로 다시 여유가 생기는 구조가 되도록 하기 위함.
-// 신청자 매칭은 기존 9시간 제한 규칙 그대로 학번·이름·전화번호 중 하나라도 일치하면 동일인으로 본다.
+// 동일 인물 판단은 lib/identity.ts 기준(학번 또는 전화번호 일치)을 그대로 쓴다 — 경고 시스템의
+// 제한 판정과 서로 다른 기준을 쓰면 한쪽만 우회되는 구멍이 생기므로 반드시 통일한다.
 export async function getRemainingReservationHours(
   supabase: ReturnType<typeof createAdminClient>,
   match: ReservationHoursMatch
 ): Promise<number> {
-  const conditions = [`student_id.eq.${match.student_id}`]
-  if (match.name) conditions.push(`name.eq.${match.name}`)
-  if (match.phone) conditions.push(`phone.eq.${match.phone}`)
-
   const { data, error } = await supabase
     .from('reservations')
     .select('reservation_date, start_time, end_time')
-    .or(conditions.join(','))
+    .or(samePersonOrFilter(match))
     .in('status', ['pending', 'approved'])
 
   if (error || !data) return 0

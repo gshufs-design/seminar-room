@@ -1,28 +1,16 @@
 import { addMonths } from 'date-fns'
 import type { createAdminClient } from '@/lib/supabase/server'
+import { samePersonOrFilter } from '@/lib/identity'
 import type { WarningStatus } from '@/types'
 
 const RESTRICTION_THRESHOLD = 2
 const RESTRICTION_MONTHS = 6 // 경고 2회 이상(이용 제한 중) 상태에서, 마지막 경고일로부터 이 기간이 지나면 제한 해제 + 경고 횟수 0회로 초기화
 const SINGLE_WARNING_RESET_MONTHS = 12 // 경고 1회 상태에서, 그 경고일로부터 이 기간이 지나면 0회로 초기화 (2회 이상이 되는 순간 이 규칙은 더 이상 적용되지 않음)
 
-// 동일 인물 판단 기준: 학번(student_id) 또는 전화번호(phone) 중 하나라도 일치하면 동일 인물로 취급한다.
-// 이름·학과는 표기가 사람마다/시점마다 다를 수 있어 매칭 기준에서 제외하고 화면 표시용으로만 쓴다.
-// 동반 이용자처럼 전화번호를 아예 수집하지 않는 경우엔 phone을 생략하면 학번만으로 매칭한다
-// (수집하지 않은 값으로는 일치 여부를 판단할 수 없으므로).
+// 동일 인물 판단 기준은 lib/identity.ts 하나로 통일해서 쓴다 (경고 시스템·9시간 예약 제한 둘 다 동일 기준).
 export interface WarningMatch {
   student_id: string
   phone?: string
-}
-
-// 두 (student_id, phone) 식별 정보가 "동일 인물"인지 판단하는 단일 기준.
-// warnings 테이블 조회뿐 아니라, 관리자 경고 관리 화면에서 여러 경고 기록을 한 사람으로 묶을 때도
-// 이 함수를 그대로 재사용해서 기준이 어긋나지 않게 한다.
-export function isSameWarnedPerson(
-  a: { student_id: string; phone: string },
-  b: { student_id: string; phone: string }
-): boolean {
-  return a.student_id === b.student_id || a.phone === b.phone
 }
 
 // 경고 횟수는 저장된 raw 경고 기록(created_at 목록)으로부터 매번 처음부터 다시 시뮬레이션해서 계산합니다.
@@ -81,11 +69,11 @@ export async function getWarningStatus(
   supabase: ReturnType<typeof createAdminClient>,
   match: WarningMatch
 ): Promise<WarningStatus> {
-  const query = match.phone
-    ? supabase.from('warnings').select('created_at').or(`student_id.eq.${match.student_id},phone.eq.${match.phone}`)
-    : supabase.from('warnings').select('created_at').eq('student_id', match.student_id)
+  const { data, error } = await supabase
+    .from('warnings')
+    .select('created_at')
+    .or(samePersonOrFilter(match))
 
-  const { data, error } = await query
   if (error || !data) return computeWarningStatus([])
   return computeWarningStatus(data.map((d) => d.created_at as string))
 }

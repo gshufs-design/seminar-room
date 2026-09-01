@@ -25,7 +25,7 @@ export default function ReservationDetailModal({ reservation, open, onClose }: R
       return
     }
     setRemainingHours(null)
-    getUserRemainingHours(reservation.student_id, reservation.name, reservation.phone).then(setRemainingHours)
+    getUserRemainingHours(reservation.student_id, reservation.phone).then(setRemainingHours)
   }, [open, reservation])
 
   return (

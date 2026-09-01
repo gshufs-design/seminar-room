@@ -2,7 +2,8 @@
 
 import { createAdminClient } from '@/lib/supabase/server'
 import { getAdminSession } from '@/lib/auth'
-import { computeWarningStatus, isSameWarnedPerson } from '@/lib/warnings'
+import { computeWarningStatus } from '@/lib/warnings'
+import { isSamePerson, samePersonOrFilter } from '@/lib/identity'
 import type { Warning, WarningGroup, WarningStatus } from '@/types'
 import { revalidatePath } from 'next/cache'
 
@@ -56,7 +57,7 @@ async function cancelReservationsForWarning(
 ): Promise<void> {
   const todayStr = new Date().toISOString().split('T')[0]
   // 동일 인물 판단 기준(학번 또는 전화번호 일치)과 일치시켜, 이 사람 명의의 예약을 빠짐없이 취소
-  const identityFilter = `student_id.eq.${identity.student_id},phone.eq.${identity.phone}`
+  const identityFilter = samePersonOrFilter(identity)
   const patch = {
     status: 'admin_cancelled' as const,
     admin_memo: '경고 누적(2회)으로 인한 이용 제한으로 자동 취소되었습니다.',
@@ -110,7 +111,7 @@ export async function addWarning(input: {
   const { data: existing } = await supabase
     .from('warnings')
     .select('created_at')
-    .or(`student_id.eq.${student_id},phone.eq.${phone}`)
+    .or(samePersonOrFilter({ student_id, phone }))
   const existingDates = (existing ?? []).map((w) => w.created_at as string)
   const beforeStatus = computeWarningStatus(existingDates)
 
@@ -189,7 +190,7 @@ export async function getAllWarningGroups(): Promise<WarningGroup[]> {
 
   for (let i = 0; i < warnings.length; i++) {
     for (let j = i + 1; j < warnings.length; j++) {
-      if (isSameWarnedPerson(warnings[i], warnings[j])) union(i, j)
+      if (isSamePerson(warnings[i], warnings[j])) union(i, j)
     }
   }
 
@@ -227,7 +228,7 @@ export async function getMyWarnings(
   const { data, error } = await supabase
     .from('warnings')
     .select('*')
-    .or(`student_id.eq.${student_id},phone.eq.${phone}`)
+    .or(samePersonOrFilter({ student_id, phone }))
     .order('created_at', { ascending: false })
 
   if (error || !data) {

@@ -154,10 +154,11 @@ export async function createReservation(formData: {
     }
   }
 
-  // 1인당 9시간 예약 제한 확인 (학번·이름·연락처 중 하나라도 일치하면 동일인 판단).
+  // 1인당 9시간 예약 제한 확인. 동일 인물 판단은 lib/identity.ts 기준(학번 또는 전화번호 일치)을 쓴다 —
+  // 경고 시스템의 제한 판정과 동일한 기준이어야 한쪽만 우회되는 구멍이 생기지 않는다.
   // 월/기간 구분 없이, "현재 시각 기준으로 아직 끝나지 않은" pending/approved 예약 시간만 합산한다.
   // 예약이 끝나거나 취소되면 그만큼 자동으로 다시 여유가 생긴다.
-  const usedHours = await getRemainingReservationHours(supabase, { student_id, name, phone })
+  const usedHours = await getRemainingReservationHours(supabase, { student_id, phone })
 
   if (usedHours + duration > RESERVATION_HOURS_LIMIT) {
     return {
