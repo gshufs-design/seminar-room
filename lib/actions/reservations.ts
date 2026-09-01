@@ -3,6 +3,7 @@
 import { createAdminClient } from '@/lib/supabase/server'
 import { canReserveTime, OPERATING_HOURS } from '@/lib/utils'
 import { getWarningStatus } from '@/lib/warnings'
+import { getRemainingReservationHours, RESERVATION_HOURS_LIMIT } from '@/lib/reservationHours'
 import type { Reservation, ReservationStatus } from '@/types'
 import { revalidatePath } from 'next/cache'
 import { sendNewReservationNotification } from '@/lib/email'
@@ -153,33 +154,15 @@ export async function createReservation(formData: {
     }
   }
 
-  // 1인당 월 9시간 예약 제한 확인 (학번·이름·연락처 중 하나라도 일치하면 동일인 판단).
-  // "해당 월(1일~말일)" 기준으로만 합산해야 매월 리셋되므로, 신청하려는 날짜가 속한 달로 범위를 제한한다.
-  const [resYear, resMonth] = reservation_date.split('-').map(Number)
-  const monthStart = `${resYear}-${String(resMonth).padStart(2, '0')}-01`
-  const monthLastDay = new Date(resYear, resMonth, 0).getDate()
-  const monthEnd = `${resYear}-${String(resMonth).padStart(2, '0')}-${String(monthLastDay).padStart(2, '0')}`
+  // 1인당 9시간 예약 제한 확인 (학번·이름·연락처 중 하나라도 일치하면 동일인 판단).
+  // 월/기간 구분 없이, "현재 시각 기준으로 아직 끝나지 않은" pending/approved 예약 시간만 합산한다.
+  // 예약이 끝나거나 취소되면 그만큼 자동으로 다시 여유가 생긴다.
+  const usedHours = await getRemainingReservationHours(supabase, { student_id, name, phone })
 
-  const { data: myReservations, error: hoursError } = await supabase
-    .from('reservations')
-    .select('start_time, end_time')
-    .or(`student_id.eq.${student_id},name.eq.${name},phone.eq.${phone}`)
-    .in('status', ['pending', 'approved'])
-    .gte('reservation_date', monthStart)
-    .lte('reservation_date', monthEnd)
-
-  if (hoursError) {
-    return { success: false, error: '예약 시간 확인 중 오류가 발생했습니다.' }
-  }
-
-  const usedHours = (myReservations ?? []).reduce((sum, r) => {
-    return sum + (parseInt(r.end_time) - parseInt(r.start_time))
-  }, 0)
-
-  if (usedHours + duration > 9) {
+  if (usedHours + duration > RESERVATION_HOURS_LIMIT) {
     return {
       success: false,
-      error: `이번 달 현재 ${usedHours}시간 예약 중입니다. 월 최대 9시간까지 가능합니다.`,
+      error: `현재 ${usedHours}시간의 예약이 남아 있습니다. 보유 가능한 예약 시간은 최대 ${RESERVATION_HOURS_LIMIT}시간까지입니다.`,
     }
   }
 
@@ -273,6 +256,15 @@ export async function getUserReservations(student_id: string, phone: string): Pr
     return []
   }
   return data ?? []
+}
+
+// "내 예약 조회" 화면에 "현재 남아있는 예약 시간: n시간 / 9시간"을 표시하기 위한 조회.
+// 9시간 제한 판정(createReservation)과 동일한 계산 로직(getRemainingReservationHours)을 그대로 재사용해서
+// 화면에 보여주는 값이 실제 제한 판정 기준과 항상 일치하도록 한다. 이 화면엔 이름 입력란이 없으므로
+// 학번+연락처로만 매칭한다.
+export async function getMyRemainingHours(student_id: string, phone: string): Promise<number> {
+  const supabase = createAdminClient()
+  return getRemainingReservationHours(supabase, { student_id, phone })
 }
 
 export async function cancelReservation(

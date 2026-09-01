@@ -5,16 +5,18 @@ import Input from './ui/Input'
 import Button from './ui/Button'
 import Badge from './ui/Badge'
 import Modal from './ui/Modal'
-import { getUserReservations, cancelReservation, getRoomPassword } from '@/lib/actions/reservations'
+import { getUserReservations, cancelReservation, getRoomPassword, getMyRemainingHours } from '@/lib/actions/reservations'
 import { getMyWarnings, getWarningNoticeText } from '@/lib/actions/warnings'
+import { RESERVATION_HOURS_LIMIT } from '@/lib/reservationHours'
 import { padHour, formatDate } from '@/lib/utils'
 import type { Reservation, Warning, WarningStatus } from '@/types'
-import { KeyRound, Loader2, AlertTriangle, ShieldAlert } from 'lucide-react'
+import { KeyRound, Loader2, AlertTriangle, ShieldAlert, Clock } from 'lucide-react'
 
 export default function MyReservations() {
   const [studentId, setStudentId] = useState('')
   const [phone, setPhone] = useState('')
   const [reservations, setReservations] = useState<Reservation[]>([])
+  const [remainingHours, setRemainingHours] = useState(0)
   const [warnings, setWarnings] = useState<Warning[]>([])
   const [warningStatus, setWarningStatus] = useState<WarningStatus | null>(null)
   const [warningNoticeText, setWarningNoticeText] = useState<string | null>(null)
@@ -46,14 +48,16 @@ export default function MyReservations() {
     setLoading(true)
     const trimmedId = studentId.trim()
     const trimmedPhone = phone.replace(/-/g, '')
-    const [data, warningResult] = await Promise.all([
+    const [data, warningResult, hours] = await Promise.all([
       getUserReservations(trimmedId, trimmedPhone),
       getMyWarnings(trimmedId, trimmedPhone),
+      getMyRemainingHours(trimmedId, trimmedPhone),
     ])
     setLoading(false)
     setReservations(data)
     setWarnings(warningResult.warnings)
     setWarningStatus(warningResult.status)
+    setRemainingHours(hours)
     setSearched(true)
   }
 
@@ -103,6 +107,21 @@ export default function MyReservations() {
           조회하기
         </Button>
       </div>
+
+      {/* 현재 남아있는 예약 시간 */}
+      {searched && (
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5 mb-6 flex items-center gap-3">
+          <div className="p-2 rounded-full bg-blue-50 text-[#003087]">
+            <Clock className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">현재 남아있는 예약 시간</p>
+            <p className="text-lg font-bold text-gray-900">
+              {remainingHours}시간 <span className="text-sm font-normal text-gray-400">/ {RESERVATION_HOURS_LIMIT}시간</span>
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* 경고 내역 */}
       {searched && warnings.length > 0 && (

@@ -1,10 +1,14 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Badge from './ui/Badge'
 import Button from './ui/Button'
 import Modal from './ui/Modal'
 import type { Reservation } from '@/types'
 import { formatDate, padHour } from '@/lib/utils'
+import { getUserRemainingHours } from '@/lib/actions/admin'
+import { RESERVATION_HOURS_LIMIT } from '@/lib/reservationHours'
+import { Clock } from 'lucide-react'
 
 interface ReservationDetailModalProps {
   reservation: Reservation | null
@@ -13,6 +17,17 @@ interface ReservationDetailModalProps {
 }
 
 export default function ReservationDetailModal({ reservation, open, onClose }: ReservationDetailModalProps) {
+  const [remainingHours, setRemainingHours] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (!open || !reservation) {
+      setRemainingHours(null)
+      return
+    }
+    setRemainingHours(null)
+    getUserRemainingHours(reservation.student_id, reservation.name, reservation.phone).then(setRemainingHours)
+  }, [open, reservation])
+
   return (
     <Modal
       isOpen={open}
@@ -33,6 +48,14 @@ export default function ReservationDetailModal({ reservation, open, onClose }: R
                 <div className="flex gap-2"><span className="text-gray-500 w-16 shrink-0">학번</span><span className="text-gray-800">{r.student_id}</span></div>
                 <div className="flex gap-2"><span className="text-gray-500 w-16 shrink-0">연락처</span><span className="text-gray-800">{r.phone}</span></div>
               </div>
+            </div>
+
+            {/* 현재 남아있는 예약 시간 (9시간 제한) */}
+            <div className="flex items-center gap-2 bg-blue-50 rounded-lg px-4 py-2.5 text-[#003087]">
+              <Clock className="w-4 h-4 shrink-0" />
+              <span className="text-sm font-medium">
+                현재 남아있는 예약 시간: {remainingHours === null ? '확인 중...' : `${remainingHours}시간 / ${RESERVATION_HOURS_LIMIT}시간`}
+              </span>
             </div>
 
             {/* 예약 정보 */}
