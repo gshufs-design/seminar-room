@@ -9,10 +9,13 @@ import TimeSlotView from '@/components/TimeSlotView'
 import PasswordManager from '@/components/PasswordManager'
 import EmailManager from '@/components/EmailManager'
 import NoticeManager from '@/components/NoticeManager'
-import type { Reservation } from '@/types'
-import { CalendarDays, List, KeyRound, Mail, Info } from 'lucide-react'
+import ReservationDetailModal from '@/components/ReservationDetailModal'
+import WarningManager from '@/components/WarningManager'
+import { getAllWarningGroups, getWarningNoticeText } from '@/lib/actions/warnings'
+import type { Reservation, WarningGroup } from '@/types'
+import { CalendarDays, List, KeyRound, Mail, Info, AlertTriangle } from 'lucide-react'
 
-type Tab = 'list' | 'calendar' | 'password' | 'email' | 'notice'
+type Tab = 'list' | 'calendar' | 'password' | 'email' | 'notice' | 'warnings'
 
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<Tab>('list')
@@ -29,6 +32,11 @@ export default function AdminPage() {
   const [monthReservations, setMonthReservations] = useState<Reservation[]>([])
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [dayReservations, setDayReservations] = useState<Reservation[]>([])
+  const [detailModal, setDetailModal] = useState<{ open: boolean; reservation: Reservation | null }>({ open: false, reservation: null })
+
+  const [warningGroups, setWarningGroups] = useState<WarningGroup[]>([])
+  const [warningNoticeText, setWarningNoticeText] = useState<string | null>(null)
+  const [warningsLoading, setWarningsLoading] = useState(true)
 
   const loadReservations = useCallback(async () => {
     setLoading(true)
@@ -69,6 +77,29 @@ export default function AdminPage() {
     setDayReservations(data)
   }
 
+  const handleOccupiedSlotClick = (reservationId: string) => {
+    const reservation = dayReservations.find((r) => r.id === reservationId)
+    if (reservation) setDetailModal({ open: true, reservation })
+  }
+
+  // 캘린더 탭(loadMonthData)과 동일하게, 탭을 열 때마다 매번 새로 불러온다.
+  // (한 번 로드된 뒤로 다시 안 불러오는 플래그 방식이었더니, 첫 호출이 어떤 이유로든
+  // 빈 배열을 반환하면 그 뒤로 영영 재시도가 안 되는 문제가 있었음 — 새 경고를 등록해야만
+  // WarningManager 내부의 별도 refresh()가 실행되면서 그제서야 목록이 보이는 버그로 나타남)
+  const loadWarnings = useCallback(async () => {
+    setWarningsLoading(true)
+    const [groups, text] = await Promise.all([getAllWarningGroups(), getWarningNoticeText()])
+    setWarningGroups(groups)
+    setWarningNoticeText(text)
+    setWarningsLoading(false)
+  }, [])
+
+  useEffect(() => {
+    if (activeTab === 'warnings') {
+      loadWarnings()
+    }
+  }, [activeTab, loadWarnings])
+
   const pending = reservations.filter((r) => r.status === 'pending').length
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
@@ -77,6 +108,7 @@ export default function AdminPage() {
     { id: 'password', label: '비밀번호 관리', icon: <KeyRound className="w-4 h-4" /> },
     { id: 'email', label: '알림 이메일', icon: <Mail className="w-4 h-4" /> },
     { id: 'notice', label: '이용 안내', icon: <Info className="w-4 h-4" /> },
+    { id: 'warnings', label: '경고 관리', icon: <AlertTriangle className="w-4 h-4" /> },
   ]
 
   return (
@@ -156,6 +188,7 @@ export default function AdminPage() {
                 onToggleHour={() => {}}
                 onReserveClick={() => {}}
                 isReadOnly
+                onOccupiedClick={handleOccupiedSlotClick}
               />
             ) : (
               <div className="bg-white rounded-lg border border-gray-200 shadow-sm h-64 flex items-center justify-center text-gray-400 text-sm">
@@ -177,6 +210,20 @@ export default function AdminPage() {
       {activeTab === 'notice' && (
         <NoticeManager currentNoticeText={noticeText} />
       )}
+
+      {activeTab === 'warnings' && (
+        warningsLoading ? (
+          <div className="text-center py-20 text-gray-400">불러오는 중...</div>
+        ) : (
+          <WarningManager initialGroups={warningGroups} initialNoticeText={warningNoticeText} />
+        )
+      )}
+
+      <ReservationDetailModal
+        reservation={detailModal.reservation}
+        open={detailModal.open}
+        onClose={() => setDetailModal({ open: false, reservation: null })}
+      />
     </div>
   )
 }

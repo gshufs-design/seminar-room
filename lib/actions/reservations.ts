@@ -2,9 +2,11 @@
 
 import { createAdminClient } from '@/lib/supabase/server'
 import { canReserveTime, OPERATING_HOURS } from '@/lib/utils'
+import { getWarningStatus } from '@/lib/warnings'
 import type { Reservation, ReservationStatus } from '@/types'
 import { revalidatePath } from 'next/cache'
 import { sendNewReservationNotification } from '@/lib/email'
+import { format } from 'date-fns'
 
 // 세미나실 예약 화면의 "이용 안내" 문구 (관리자가 직접 수정, 비어 있으면 기본 문구 사용) — 개인정보 아님, 공개적으로 읽을 수 있어야 함
 export async function getRoomNoticeText(): Promise<string | null> {
@@ -123,12 +125,48 @@ export async function createReservation(formData: {
 
   const supabase = createAdminClient()
 
-  // 1인당 9시간 예약 제한 확인 (학번·이름·연락처 중 하나라도 일치하면 동일인 판단)
+  // 경고 2회 이상 누적 시 마지막 경고일로부터 6개월간 이용 제한 (동일 인물 판단: 학번 또는 전화번호 일치)
+  const mainWarningStatus = await getWarningStatus(supabase, { student_id, phone })
+  if (mainWarningStatus.restricted && mainWarningStatus.restrictedUntil) {
+    const { data: settings } = await supabase
+      .from('room_settings')
+      .select('warning_notice_text')
+      .eq('id', 1)
+      .maybeSingle()
+    const untilStr = format(new Date(mainWarningStatus.restrictedUntil), 'yyyy-MM-dd')
+    const notice = settings?.warning_notice_text ? ` ${settings.warning_notice_text}` : ''
+    return {
+      success: false,
+      error: `경고 누적으로 ${untilStr}까지 세미나실 예약이 제한됩니다.${notice}`,
+    }
+  }
+
+  // 동반 이용자도 동일하게 이용 제한 여부 확인 (동반 이용자 입력폼엔 연락처가 없으므로 학번만으로 매칭)
+  for (const cu of co_users) {
+    const cuStatus = await getWarningStatus(supabase, { student_id: cu.student_id })
+    if (cuStatus.restricted && cuStatus.restrictedUntil) {
+      const untilStr = format(new Date(cuStatus.restrictedUntil), 'yyyy-MM-dd')
+      return {
+        success: false,
+        error: `동반 이용자 '${cu.name}'님은 경고 누적으로 ${untilStr}까지 이용이 제한되어 동반 이용자로 등록할 수 없습니다.`,
+      }
+    }
+  }
+
+  // 1인당 월 9시간 예약 제한 확인 (학번·이름·연락처 중 하나라도 일치하면 동일인 판단).
+  // "해당 월(1일~말일)" 기준으로만 합산해야 매월 리셋되므로, 신청하려는 날짜가 속한 달로 범위를 제한한다.
+  const [resYear, resMonth] = reservation_date.split('-').map(Number)
+  const monthStart = `${resYear}-${String(resMonth).padStart(2, '0')}-01`
+  const monthLastDay = new Date(resYear, resMonth, 0).getDate()
+  const monthEnd = `${resYear}-${String(resMonth).padStart(2, '0')}-${String(monthLastDay).padStart(2, '0')}`
+
   const { data: myReservations, error: hoursError } = await supabase
     .from('reservations')
     .select('start_time, end_time')
     .or(`student_id.eq.${student_id},name.eq.${name},phone.eq.${phone}`)
     .in('status', ['pending', 'approved'])
+    .gte('reservation_date', monthStart)
+    .lte('reservation_date', monthEnd)
 
   if (hoursError) {
     return { success: false, error: '예약 시간 확인 중 오류가 발생했습니다.' }
@@ -141,7 +179,7 @@ export async function createReservation(formData: {
   if (usedHours + duration > 9) {
     return {
       success: false,
-      error: `현재 ${usedHours}시간 예약 중입니다. 최대 9시간까지 가능합니다.`,
+      error: `이번 달 현재 ${usedHours}시간 예약 중입니다. 월 최대 9시간까지 가능합니다.`,
     }
   }
 

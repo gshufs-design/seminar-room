@@ -1,22 +1,30 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Input from './ui/Input'
 import Button from './ui/Button'
 import Badge from './ui/Badge'
 import Modal from './ui/Modal'
 import { getUserReservations, cancelReservation, getRoomPassword } from '@/lib/actions/reservations'
+import { getMyWarnings, getWarningNoticeText } from '@/lib/actions/warnings'
 import { padHour, formatDate } from '@/lib/utils'
-import type { Reservation } from '@/types'
-import { KeyRound, Loader2, AlertTriangle } from 'lucide-react'
+import type { Reservation, Warning, WarningStatus } from '@/types'
+import { KeyRound, Loader2, AlertTriangle, ShieldAlert } from 'lucide-react'
 
 export default function MyReservations() {
   const [studentId, setStudentId] = useState('')
   const [phone, setPhone] = useState('')
   const [reservations, setReservations] = useState<Reservation[]>([])
+  const [warnings, setWarnings] = useState<Warning[]>([])
+  const [warningStatus, setWarningStatus] = useState<WarningStatus | null>(null)
+  const [warningNoticeText, setWarningNoticeText] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [searched, setSearched] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    getWarningNoticeText().then(setWarningNoticeText)
+  }, [])
 
   // Password reveal state
   const [passwordModal, setPasswordModal] = useState<{open: boolean; reservationId: string; password?: string; error?: string; loading: boolean}>({
@@ -36,9 +44,16 @@ export default function MyReservations() {
       return
     }
     setLoading(true)
-    const data = await getUserReservations(studentId.trim(), phone.replace(/-/g, ''))
+    const trimmedId = studentId.trim()
+    const trimmedPhone = phone.replace(/-/g, '')
+    const [data, warningResult] = await Promise.all([
+      getUserReservations(trimmedId, trimmedPhone),
+      getMyWarnings(trimmedId, trimmedPhone),
+    ])
     setLoading(false)
     setReservations(data)
+    setWarnings(warningResult.warnings)
+    setWarningStatus(warningResult.status)
     setSearched(true)
   }
 
@@ -88,6 +103,36 @@ export default function MyReservations() {
           조회하기
         </Button>
       </div>
+
+      {/* 경고 내역 */}
+      {searched && warnings.length > 0 && (
+        <div className={`rounded-lg border shadow-sm p-5 mb-6 ${warningStatus?.restricted ? 'bg-red-50 border-red-200' : 'bg-yellow-50 border-yellow-200'}`}>
+          <div className="flex items-center gap-2 mb-2">
+            {warningStatus?.restricted ? (
+              <ShieldAlert className="w-5 h-5 text-red-600" />
+            ) : (
+              <AlertTriangle className="w-5 h-5 text-yellow-600" />
+            )}
+            <h3 className={`font-semibold ${warningStatus?.restricted ? 'text-red-800' : 'text-yellow-800'}`}>
+              경고 내역 ({warningStatus?.count ?? warnings.length}회)
+            </h3>
+          </div>
+          {warningStatus?.restricted && warningStatus.restrictedUntil && (
+            <p className="text-sm text-red-700 font-medium mb-2">
+              경고 누적으로 {formatDate(warningStatus.restrictedUntil, 'yyyy년 MM월 dd일')}까지 신규 예약 및 동반 이용자 등록이 제한됩니다.
+              {warningNoticeText && <span className="block mt-1 text-red-700">{warningNoticeText}</span>}
+            </p>
+          )}
+          <ul className="space-y-1.5 mt-2">
+            {warnings.map((w) => (
+              <li key={w.id} className="text-sm text-gray-700 flex gap-2">
+                <span className="text-gray-500 shrink-0">{formatDate(w.created_at, 'yyyy-MM-dd')}</span>
+                <span>{w.reason}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Results */}
       {searched && (

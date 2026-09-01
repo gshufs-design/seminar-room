@@ -28,7 +28,7 @@
 - 예약 승인 / 거절 처리
 - 관리자 메모 작성
 - 세미나실 비밀번호 변경
-- 월간 통계 조회 (차트)
+- 이용자 경고 관리 (2회 누적 시 6개월간 이용 제한)
 
 ---
 
@@ -122,8 +122,7 @@ seminar-room/
 │   │   ├── layout.tsx          # 관리자 레이아웃 (인증 검증)
 │   │   ├── AdminNav.tsx        # 관리자 네비게이션
 │   │   ├── page.tsx            # 관리자 대시보드
-│   │   ├── login/page.tsx      # 관리자 로그인
-│   │   └── stats/page.tsx      # 이용 통계
+│   │   └── login/page.tsx      # 관리자 로그인
 │   └── my-reservations/
 │       └── page.tsx            # 내 예약 조회
 ├── components/
@@ -139,7 +138,7 @@ seminar-room/
 │   ├── MyReservations.tsx      # 내 예약 조회/관리
 │   ├── AdminTable.tsx          # 관리자 예약 테이블
 │   ├── PasswordManager.tsx     # 비밀번호 관리
-│   └── StatsView.tsx           # 통계 차트
+│   └── WarningManager.tsx      # 경고 관리
 ├── lib/
 │   ├── supabase/
 │   │   ├── client.ts           # 브라우저 클라이언트

@@ -12,6 +12,8 @@ interface TimeSlotViewProps {
   onToggleHour: (hour: number) => void
   onReserveClick: () => void
   isReadOnly?: boolean
+  // 관리자 캘린더에서 예약이 찬 슬롯을 클릭했을 때 해당 예약 상세를 보여주기 위한 콜백
+  onOccupiedClick?: (reservationId: string) => void
 }
 
 export default function TimeSlotView({
@@ -21,6 +23,7 @@ export default function TimeSlotView({
   onToggleHour,
   onReserveClick,
   isReadOnly = false,
+  onOccupiedClick,
 }: TimeSlotViewProps) {
   const slots = generateTimeSlots(reservations)
 
@@ -35,7 +38,13 @@ export default function TimeSlotView({
   }
 
   const handleHourClick = (slot: TimeSlot) => {
-    if (slot.status !== 'available' || isReadOnly) return
+    if (slot.status !== 'available') {
+      if (isReadOnly && onOccupiedClick && slot.reservationId) {
+        onOccupiedClick(slot.reservationId)
+      }
+      return
+    }
+    if (isReadOnly) return
     onToggleHour(slot.hour)
   }
 
@@ -62,6 +71,7 @@ export default function TimeSlotView({
         {slots.map((slot) => {
           const isSelected = selectedHours.includes(slot.hour)
           const slotLabel = `${padHour(slot.hour)} ~ ${padHour(slot.hour + 1)}`
+          const isOccupiedClickable = slot.status !== 'available' && isReadOnly && !!onOccupiedClick && !!slot.reservationId
 
           return (
             <div
@@ -70,6 +80,7 @@ export default function TimeSlotView({
               className={`
                 flex items-center gap-3 px-5 py-3 transition-colors
                 ${slot.status === 'available' && !isReadOnly ? 'cursor-pointer hover:bg-gray-50' : ''}
+                ${isOccupiedClickable ? 'cursor-pointer hover:bg-gray-50' : ''}
                 ${isSelected ? 'bg-blue-50' : ''}
               `}
             >

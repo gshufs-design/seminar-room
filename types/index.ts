@@ -36,6 +36,7 @@ export interface RoomSettings {
   room_password: string
   notification_email: string | null
   notice_text: string | null
+  warning_notice_text: string | null
   updated_at: string
 }
 
@@ -63,19 +64,39 @@ export interface ReservationFormData {
   end_hour: number
 }
 
-export interface MonthlyStats {
-  total: number
-  approved: number
-  rejected: number
-  cancelled: number
-  pending: number
-  byDepartment: { department: string; count: number }[]
-  byDay: { date: string; count: number }[]
-}
-
 export interface AdminSession {
   id: string
   username: string
+}
+
+// =============================================
+// 경고 시스템 (Warnings)
+// =============================================
+export interface Warning {
+  id: string
+  student_id: string
+  name: string
+  department: string
+  phone: string
+  reason: string
+  created_at: string
+}
+
+export interface WarningStatus {
+  count: number
+  lastWarningDate: string | null
+  restricted: boolean
+  restrictedUntil: string | null
+}
+
+// 관리자 "경고 관리" 화면에서 동일 이용자(학번+이름+전화번호)의 경고를 묶어서 보여주기 위한 그룹
+export interface WarningGroup {
+  student_id: string
+  name: string
+  department: string
+  phone: string
+  warnings: Warning[]
+  status: WarningStatus
 }
 
 // =============================================

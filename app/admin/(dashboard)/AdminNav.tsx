@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Building2, LayoutDashboard, BarChart2, LogOut, Menu, X, Archive } from 'lucide-react'
+import { Building2, LayoutDashboard, LogOut, Menu, X, Archive } from 'lucide-react'
 import { useState } from 'react'
 import { adminLogout } from '@/lib/actions/admin'
 
@@ -17,7 +17,6 @@ export default function AdminNav({ username }: AdminNavProps) {
   const navLinks = [
     { href: '/admin', label: '세미나실 예약', icon: LayoutDashboard },
     { href: '/admin/lockers', label: '사물함 신청', icon: Archive },
-    { href: '/admin/stats', label: '통계', icon: BarChart2 },
   ]
 
   const handleLogout = async () => {

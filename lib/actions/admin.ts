@@ -3,7 +3,7 @@
 import bcrypt from 'bcryptjs'
 import { createAdminClient } from '@/lib/supabase/server'
 import { signAdminToken, setAdminCookie, clearAdminCookie, getAdminSession } from '@/lib/auth'
-import type { Reservation, ReservationStatus, MonthlyStats } from '@/types'
+import type { Reservation, ReservationStatus } from '@/types'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
@@ -243,56 +243,6 @@ export async function updateRoomPassword(
   if (error) return { success: false, error: '비밀번호 변경 중 오류가 발생했습니다.' }
 
   return { success: true }
-}
-
-export async function getMonthlyStats(year: number, month: number): Promise<MonthlyStats> {
-  const session = await getAdminSession()
-  if (!session) {
-    return { total: 0, approved: 0, rejected: 0, cancelled: 0, pending: 0, byDepartment: [], byDay: [] }
-  }
-
-  const supabase = createAdminClient()
-  const startDate = `${year}-${String(month).padStart(2, '0')}-01`
-  const lastDay = new Date(year, month, 0).getDate()
-  const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
-
-  const { data, error } = await supabase
-    .from('reservations')
-    .select('*')
-    .gte('reservation_date', startDate)
-    .lte('reservation_date', endDate)
-
-  if (error || !data) {
-    return { total: 0, approved: 0, rejected: 0, cancelled: 0, pending: 0, byDepartment: [], byDay: [] }
-  }
-
-  const total = data.length
-  const approved = data.filter((r) => r.status === 'approved').length
-  const rejected = data.filter((r) => r.status === 'rejected').length
-  const cancelled = data.filter((r) => r.status === 'cancelled').length
-  const pending = data.filter((r) => r.status === 'pending').length
-
-  const deptMap: Record<string, number> = {}
-  data.forEach((r) => {
-    if (r.status !== 'rejected' && r.status !== 'cancelled') {
-      deptMap[r.department] = (deptMap[r.department] ?? 0) + 1
-    }
-  })
-  const byDepartment = Object.entries(deptMap)
-    .map(([department, count]) => ({ department, count }))
-    .sort((a, b) => b.count - a.count)
-
-  const dayMap: Record<string, number> = {}
-  data.forEach((r) => {
-    if (r.status !== 'rejected' && r.status !== 'cancelled') {
-      dayMap[r.reservation_date] = (dayMap[r.reservation_date] ?? 0) + 1
-    }
-  })
-  const byDay = Object.entries(dayMap)
-    .map(([date, count]) => ({ date, count }))
-    .sort((a, b) => a.date.localeCompare(b.date))
-
-  return { total, approved, rejected, cancelled, pending, byDepartment, byDay }
 }
 
 export async function getAdminDayReservations(date: string): Promise<Reservation[]> {

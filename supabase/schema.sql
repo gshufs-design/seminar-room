@@ -81,6 +81,9 @@ CREATE TABLE IF NOT EXISTS room_settings (
 
 -- 기존 테이블에 컬럼 추가 (이미 생성된 경우)
 ALTER TABLE room_settings ADD COLUMN IF NOT EXISTS notification_email VARCHAR(255);
+ALTER TABLE room_settings ADD COLUMN IF NOT EXISTS notice_text TEXT;
+-- 경고 2회 이상 누적으로 이용 제한된 이용자에게 보여줄 안내 문구 (관리자가 직접 입력/수정)
+ALTER TABLE room_settings ADD COLUMN IF NOT EXISTS warning_notice_text TEXT;
 
 CREATE TRIGGER trg_room_settings_updated_at
   BEFORE UPDATE ON room_settings
@@ -270,3 +273,24 @@ INSERT INTO locker_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
 
 ALTER TABLE locker_settings ENABLE ROW LEVEL SECURITY;
 -- 정책 없음 = anon 직접 접근 불가. 서버 액션(서비스 롤)을 통해서만 읽고 씁니다.
+
+-- =============================================
+-- 7. warnings 테이블 (세미나실 이용자 경고)
+-- =============================================
+-- 이용자 매칭은 학번(student_id)을 기본 키로 사용하고, 이름·전화번호(신청자) 또는
+-- 이름·학과(동반 이용자 — 동반 이용자 입력폼엔 전화번호가 없음)로 교차 검증합니다.
+-- 동일 학과 동명이인이 있어도 학번까지 같이 맞아야 매칭되므로 오매칭을 방지합니다.
+CREATE TABLE IF NOT EXISTS warnings (
+  id           UUID         DEFAULT gen_random_uuid() PRIMARY KEY,
+  student_id   VARCHAR(20)  NOT NULL,
+  name         VARCHAR(50)  NOT NULL,
+  department   VARCHAR(100) NOT NULL,
+  phone        VARCHAR(20)  NOT NULL,
+  reason       TEXT         NOT NULL,
+  created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_warnings_identity ON warnings (student_id, name, phone);
+
+ALTER TABLE warnings ENABLE ROW LEVEL SECURITY;
+-- 정책 없음 = anon 접근 불가, service_role(서버 액션)만 가능 (admins 테이블과 동일 패턴)
