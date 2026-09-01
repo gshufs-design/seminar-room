@@ -8,6 +8,12 @@ export interface ReservationHoursMatch {
   phone?: string
 }
 
+// 화면에 함께 보여줄 두 기준의 현재 값 ("현재 남아있는 예약"과 "이번 달 이용")
+export interface ReservationHoursSummary {
+  remaining: number // 지금 아직 끝나지 않은 예약 시간의 합
+  monthly: number // 이번 달(1일~말일)에 실제로 쓴/쓸 예약 시간의 합
+}
+
 // "지금 이 순간 기준으로 아직 끝나지 않은" pending/approved 예약 시간의 합.
 // 월/기간 같은 별도 구간 개념 없이, 호출 시점마다 처음부터 다시 계산한다 — 예약 시간이
 // 지나거나 취소되면 그만큼 자동으로 다시 여유가 생기는 구조가 되도록 하기 위함.
@@ -32,4 +38,29 @@ export async function getRemainingReservationHours(
     if (endDateTime <= now) return sum // 이미 종료된 예약은 제외
     return sum + (parseInt(r.end_time) - parseInt(r.start_time))
   }, 0)
+}
+
+// "이번 달(1일~말일)"에 속한 pending/approved 예약 시간의 합 — 위 getRemainingReservationHours와
+// 달리 이미 지난 것도 전부 포함해서 "그 달에 실제로 쓴/쓸 시간"을 계산한다. 9시간 제한은
+// (1) 지금 아직 안 끝난 예약 합계, (2) 이번 달 실제 이용 합계 — 두 기준을 독립적으로 함께 적용한다.
+export async function getMonthlyReservationHours(
+  supabase: ReturnType<typeof createAdminClient>,
+  match: ReservationHoursMatch,
+  year: number,
+  month: number
+): Promise<number> {
+  const monthStart = `${year}-${String(month).padStart(2, '0')}-01`
+  const lastDay = new Date(year, month, 0).getDate()
+  const monthEnd = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+
+  const { data, error } = await supabase
+    .from('reservations')
+    .select('start_time, end_time')
+    .or(samePersonOrFilter(match))
+    .in('status', ['pending', 'approved'])
+    .gte('reservation_date', monthStart)
+    .lte('reservation_date', monthEnd)
+
+  if (error || !data) return 0
+  return data.reduce((sum, r) => sum + (parseInt(r.end_time) - parseInt(r.start_time)), 0)
 }

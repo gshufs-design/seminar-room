@@ -3,7 +3,9 @@
 import bcrypt from 'bcryptjs'
 import { createAdminClient } from '@/lib/supabase/server'
 import { signAdminToken, setAdminCookie, clearAdminCookie, getAdminSession } from '@/lib/auth'
-import { getRemainingReservationHours } from '@/lib/reservationHours'
+import { getRemainingReservationHours, getMonthlyReservationHours } from '@/lib/reservationHours'
+import type { ReservationHoursSummary } from '@/lib/reservationHours'
+import { getKstNow } from '@/lib/utils'
 import type { Reservation, ReservationStatus } from '@/types'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
@@ -261,12 +263,17 @@ export async function getAdminDayReservations(date: string): Promise<Reservation
   return data ?? []
 }
 
-// 관리자가 특정 이용자(예약 상세 등에서)를 확인할 때 "현재 남아있는 예약 시간"을 보여주기 위한 조회.
-// 9시간 제한 판정(createReservation)과 동일한 계산 로직(getRemainingReservationHours)을 그대로 재사용.
-export async function getUserRemainingHours(student_id: string, phone: string): Promise<number> {
+// 관리자가 특정 이용자(예약 상세 등에서)를 확인할 때 "현재 남아있는 예약 시간"과 "이번 달 이용 시간"을
+// 함께 보여주기 위한 조회. 9시간 제한 판정(createReservation)과 동일한 계산 로직을 그대로 재사용.
+export async function getUserRemainingHours(student_id: string, phone: string): Promise<ReservationHoursSummary> {
   const session = await getAdminSession()
-  if (!session) return 0
+  if (!session) return { remaining: 0, monthly: 0 }
 
   const supabase = createAdminClient()
-  return getRemainingReservationHours(supabase, { student_id, phone })
+  const kstNow = getKstNow()
+  const [remaining, monthly] = await Promise.all([
+    getRemainingReservationHours(supabase, { student_id, phone }),
+    getMonthlyReservationHours(supabase, { student_id, phone }, kstNow.getUTCFullYear(), kstNow.getUTCMonth() + 1),
+  ])
+  return { remaining, monthly }
 }

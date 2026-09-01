@@ -1,9 +1,10 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase/server'
-import { canReserveTime, OPERATING_HOURS } from '@/lib/utils'
+import { canReserveTime, OPERATING_HOURS, getKstNow } from '@/lib/utils'
 import { getWarningStatus } from '@/lib/warnings'
-import { getRemainingReservationHours, RESERVATION_HOURS_LIMIT } from '@/lib/reservationHours'
+import { getRemainingReservationHours, getMonthlyReservationHours, RESERVATION_HOURS_LIMIT } from '@/lib/reservationHours'
+import type { ReservationHoursSummary } from '@/lib/reservationHours'
 import type { Reservation, ReservationStatus } from '@/types'
 import { revalidatePath } from 'next/cache'
 import { sendNewReservationNotification } from '@/lib/email'
@@ -156,8 +157,9 @@ export async function createReservation(formData: {
 
   // 1인당 9시간 예약 제한 확인. 동일 인물 판단은 lib/identity.ts 기준(학번 또는 전화번호 일치)을 쓴다 —
   // 경고 시스템의 제한 판정과 동일한 기준이어야 한쪽만 우회되는 구멍이 생기지 않는다.
-  // 월/기간 구분 없이, "현재 시각 기준으로 아직 끝나지 않은" pending/approved 예약 시간만 합산한다.
-  // 예약이 끝나거나 취소되면 그만큼 자동으로 다시 여유가 생긴다.
+  // 서로 독립적인 두 기준을 모두 만족해야 한다:
+  //   (1) 현재 시각 기준 아직 끝나지 않은 예약 합계 ≤ 9시간 (예약이 끝나거나 취소되면 자동으로 여유가 생김)
+  //   (2) 신청하려는 날짜가 속한 달(1일~말일)의 실제 이용 시간 합계 ≤ 9시간 (이미 지난 것도 포함)
   const usedHours = await getRemainingReservationHours(supabase, { student_id, phone })
   // "남아있는 예약 시간"(이미 잡아둔 시간)과 별개로, "추가로 신청 가능한 시간"을 명확히 구분해서 안내한다.
   // (기존 문구는 "9시간까지 남았다"처럼 읽혀서 "한 번에 9시간까지 예약 가능"으로 오해될 수 있었음)
@@ -166,7 +168,22 @@ export async function createReservation(formData: {
   if (duration > remainingCapacity) {
     return {
       success: false,
-      error: `현재 ${usedHours}시간이 예약되어 있어, 추가로 ${remainingCapacity}시간까지만 신청 가능합니다. (1인당 보유 가능 최대 시간: ${RESERVATION_HOURS_LIMIT}시간)`,
+      error: remainingCapacity === 0
+        ? `현재 이미 ${RESERVATION_HOURS_LIMIT}시간을 모두 예약하셨습니다. (1인당 보유 가능 최대 시간: ${RESERVATION_HOURS_LIMIT}시간)`
+        : `현재 ${usedHours}시간이 예약되어 있어, 추가로 ${remainingCapacity}시간까지만 신청 가능합니다. (1인당 보유 가능 최대 시간: ${RESERVATION_HOURS_LIMIT}시간)`,
+    }
+  }
+
+  const [resYear, resMonth] = reservation_date.split('-').map(Number)
+  const monthlyUsedHours = await getMonthlyReservationHours(supabase, { student_id, phone }, resYear, resMonth)
+  const monthlyRemainingCapacity = Math.max(0, RESERVATION_HOURS_LIMIT - monthlyUsedHours)
+
+  if (duration > monthlyRemainingCapacity) {
+    return {
+      success: false,
+      error: monthlyRemainingCapacity === 0
+        ? `이번 달 이미 ${RESERVATION_HOURS_LIMIT}시간을 모두 이용하셨습니다. (1인당 월 최대 이용 시간: ${RESERVATION_HOURS_LIMIT}시간)`
+        : `이번 달 이미 ${monthlyUsedHours}시간을 이용하셔서, 추가로 ${monthlyRemainingCapacity}시간까지만 신청 가능합니다. (1인당 월 최대 이용 시간: ${RESERVATION_HOURS_LIMIT}시간)`,
     }
   }
 
@@ -262,13 +279,17 @@ export async function getUserReservations(student_id: string, phone: string): Pr
   return data ?? []
 }
 
-// "내 예약 조회" 화면에 "현재 남아있는 예약 시간: n시간 / 9시간"을 표시하기 위한 조회.
-// 9시간 제한 판정(createReservation)과 동일한 계산 로직(getRemainingReservationHours)을 그대로 재사용해서
-// 화면에 보여주는 값이 실제 제한 판정 기준과 항상 일치하도록 한다. 이 화면엔 이름 입력란이 없으므로
-// 학번+연락처로만 매칭한다.
-export async function getMyRemainingHours(student_id: string, phone: string): Promise<number> {
+// "내 예약 조회" 화면에 "현재 남아있는 예약 시간"과 "이번 달 이용 시간"을 함께 표시하기 위한 조회.
+// 9시간 제한 판정(createReservation)과 동일한 계산 로직을 그대로 재사용해서 화면에 보여주는 값이
+// 실제 제한 판정 기준과 항상 일치하도록 한다. 이 화면엔 이름 입력란이 없으므로 학번+연락처로만 매칭한다.
+export async function getMyRemainingHours(student_id: string, phone: string): Promise<ReservationHoursSummary> {
   const supabase = createAdminClient()
-  return getRemainingReservationHours(supabase, { student_id, phone })
+  const kstNow = getKstNow()
+  const [remaining, monthly] = await Promise.all([
+    getRemainingReservationHours(supabase, { student_id, phone }),
+    getMonthlyReservationHours(supabase, { student_id, phone }, kstNow.getUTCFullYear(), kstNow.getUTCMonth() + 1),
+  ])
+  return { remaining, monthly }
 }
 
 export async function cancelReservation(

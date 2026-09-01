@@ -301,7 +301,9 @@ ALTER TABLE warnings ENABLE ROW LEVEL SECURITY;
 -- 서버 액션(createReservation)에서도 신청 전에 9시간 제한을 확인하지만, "확인 후 저장" 사이에
 -- 시간차가 있어 거의 동시에 여러 건이 접수되면 이론적으로 9시간을 넘겨 저장될 수 있다.
 -- check_reservation_overlap 트리거(중복 예약 방지)와 동일한 이유로, 여기서도 DB 레벨에서
--- 최종적으로 한 번 더 막는다. 이미 끝난 예약은 제외하고(지금 시각 이후에 끝나는 것만 합산한다).
+-- 최종적으로 한 번 더 막는다. 서버 액션과 동일하게 서로 독립적인 두 기준을 모두 검사한다:
+--   (1) 지금 시각 이후에 끝나는(아직 안 끝난) pending/approved 예약 합계 ≤ 9시간
+--   (2) 예약 날짜가 속한 달(1일~말일)의 pending/approved 예약 합계(이미 지난 것 포함) ≤ 9시간
 --
 -- 신규 예약 생성(INSERT)에만 건다 — 이미 저장된(어쩌다 9시간을 넘겨버린) 예약을 관리자가 나중에
 -- 승인/거절/메모 수정(UPDATE)하려는 것까지 막아버리면, 문제를 해결하려는 조작 자체가 막혀버리는
@@ -309,24 +311,49 @@ ALTER TABLE warnings ENABLE ROW LEVEL SECURITY;
 CREATE OR REPLACE FUNCTION check_reservation_hours_limit()
 RETURNS TRIGGER AS $$
 DECLARE
-  total_hours NUMERIC;
+  remaining_hours NUMERIC;
+  monthly_hours NUMERIC;
+  new_duration NUMERIC;
+  month_start DATE;
+  month_end DATE;
 BEGIN
   IF NEW.status NOT IN ('pending', 'approved') THEN
     RETURN NEW;
   END IF;
 
+  new_duration := EXTRACT(EPOCH FROM (NEW.end_time - NEW.start_time)) / 3600;
+
+  -- 기준 (1): 아직 끝나지 않은 예약 합계
   SELECT COALESCE(SUM(EXTRACT(EPOCH FROM (r.end_time - r.start_time)) / 3600), 0)
-  INTO total_hours
+  INTO remaining_hours
   FROM reservations r
   WHERE r.status IN ('pending', 'approved')
     AND r.id <> COALESCE(NEW.id, '00000000-0000-0000-0000-000000000000'::UUID)
     AND (r.student_id = NEW.student_id OR r.phone = NEW.phone)
     AND (r.reservation_date + r.end_time) > (NOW() AT TIME ZONE 'Asia/Seoul');
 
-  total_hours := total_hours + EXTRACT(EPOCH FROM (NEW.end_time - NEW.start_time)) / 3600;
+  remaining_hours := remaining_hours + new_duration;
 
-  IF total_hours > 9 THEN
-    RAISE EXCEPTION 'Reservation hour limit exceeded: % hours (max 9)', total_hours;
+  IF remaining_hours > 9 THEN
+    RAISE EXCEPTION 'Reservation hour limit exceeded (remaining): % hours (max 9)', remaining_hours;
+  END IF;
+
+  -- 기준 (2): 예약 날짜가 속한 달의 실제 이용 합계 (이미 지난 것도 포함)
+  month_start := date_trunc('month', NEW.reservation_date)::DATE;
+  month_end := (date_trunc('month', NEW.reservation_date) + INTERVAL '1 month' - INTERVAL '1 day')::DATE;
+
+  SELECT COALESCE(SUM(EXTRACT(EPOCH FROM (r.end_time - r.start_time)) / 3600), 0)
+  INTO monthly_hours
+  FROM reservations r
+  WHERE r.status IN ('pending', 'approved')
+    AND r.id <> COALESCE(NEW.id, '00000000-0000-0000-0000-000000000000'::UUID)
+    AND (r.student_id = NEW.student_id OR r.phone = NEW.phone)
+    AND r.reservation_date BETWEEN month_start AND month_end;
+
+  monthly_hours := monthly_hours + new_duration;
+
+  IF monthly_hours > 9 THEN
+    RAISE EXCEPTION 'Reservation hour limit exceeded (monthly): % hours (max 9)', monthly_hours;
   END IF;
 
   RETURN NEW;

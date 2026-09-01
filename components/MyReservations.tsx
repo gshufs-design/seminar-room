@@ -17,6 +17,7 @@ export default function MyReservations() {
   const [phone, setPhone] = useState('')
   const [reservations, setReservations] = useState<Reservation[]>([])
   const [remainingHours, setRemainingHours] = useState(0)
+  const [monthlyHours, setMonthlyHours] = useState(0)
   const [warnings, setWarnings] = useState<Warning[]>([])
   const [warningStatus, setWarningStatus] = useState<WarningStatus | null>(null)
   const [warningNoticeText, setWarningNoticeText] = useState<string | null>(null)
@@ -57,7 +58,8 @@ export default function MyReservations() {
     setReservations(data)
     setWarnings(warningResult.warnings)
     setWarningStatus(warningResult.status)
-    setRemainingHours(hours)
+    setRemainingHours(hours.remaining)
+    setMonthlyHours(hours.monthly)
     setSearched(true)
   }
 
@@ -108,17 +110,30 @@ export default function MyReservations() {
         </Button>
       </div>
 
-      {/* 현재 남아있는 예약 시간 */}
+      {/* 9시간 제한 이용 현황 (현재 남아있는 예약 / 이번 달 이용) */}
       {searched && (
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5 mb-6 flex items-center gap-3">
-          <div className="p-2 rounded-full bg-blue-50 text-[#003087]">
-            <Clock className="w-5 h-5" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5 flex items-center gap-3">
+            <div className="p-2 rounded-full bg-blue-50 text-[#003087]">
+              <Clock className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">현재 남아있는 예약</p>
+              <p className="text-lg font-bold text-gray-900">
+                {remainingHours}시간 <span className="text-sm font-normal text-gray-400">/ {RESERVATION_HOURS_LIMIT}시간</span>
+              </p>
+            </div>
           </div>
-          <div>
-            <p className="text-sm text-gray-500">현재 남아있는 예약 시간</p>
-            <p className="text-lg font-bold text-gray-900">
-              {remainingHours}시간 <span className="text-sm font-normal text-gray-400">/ {RESERVATION_HOURS_LIMIT}시간</span>
-            </p>
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5 flex items-center gap-3">
+            <div className="p-2 rounded-full bg-blue-50 text-[#003087]">
+              <Clock className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">이번 달 이용</p>
+              <p className="text-lg font-bold text-gray-900">
+                {monthlyHours}시간 <span className="text-sm font-normal text-gray-400">/ {RESERVATION_HOURS_LIMIT}시간</span>
+              </p>
+            </div>
           </div>
         </div>
       )}

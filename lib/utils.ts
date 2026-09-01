@@ -94,6 +94,13 @@ export function canShowPassword(reservationDate: string, startTime: string): boo
   return now >= showFrom
 }
 
+// 서버가 UTC로 돌아가더라도 "지금 KST로 몇 년 몇 월인지"를 정확히 구하기 위한 헬퍼.
+// 자정 무렵(KST 00:00~09:00 = UTC 전날 15:00~24:00)에 서버 로컬 시간대 기준으로 월을 구하면
+// 자칫 하루/한 달 어긋날 수 있어서, UTC 시각에 9시간을 더한 뒤 UTC getter로 읽는 방식을 쓴다.
+export function getKstNow(): Date {
+  return new Date(Date.now() + 9 * 60 * 60 * 1000)
+}
+
 export function getMonthDays(year: number, month: number): Date[] {
   const start = startOfMonth(new Date(year, month - 1))
   const end = endOfMonth(new Date(year, month - 1))

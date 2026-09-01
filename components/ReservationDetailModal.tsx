@@ -8,6 +8,7 @@ import type { Reservation } from '@/types'
 import { formatDate, padHour } from '@/lib/utils'
 import { getUserRemainingHours } from '@/lib/actions/admin'
 import { RESERVATION_HOURS_LIMIT } from '@/lib/reservationHours'
+import type { ReservationHoursSummary } from '@/lib/reservationHours'
 import { Clock } from 'lucide-react'
 
 interface ReservationDetailModalProps {
@@ -17,15 +18,15 @@ interface ReservationDetailModalProps {
 }
 
 export default function ReservationDetailModal({ reservation, open, onClose }: ReservationDetailModalProps) {
-  const [remainingHours, setRemainingHours] = useState<number | null>(null)
+  const [hours, setHours] = useState<ReservationHoursSummary | null>(null)
 
   useEffect(() => {
     if (!open || !reservation) {
-      setRemainingHours(null)
+      setHours(null)
       return
     }
-    setRemainingHours(null)
-    getUserRemainingHours(reservation.student_id, reservation.phone).then(setRemainingHours)
+    setHours(null)
+    getUserRemainingHours(reservation.student_id, reservation.phone).then(setHours)
   }, [open, reservation])
 
   return (
@@ -50,11 +51,13 @@ export default function ReservationDetailModal({ reservation, open, onClose }: R
               </div>
             </div>
 
-            {/* 현재 남아있는 예약 시간 (9시간 제한) */}
+            {/* 9시간 제한 이용 현황 (현재 남아있는 예약 / 이번 달 이용) */}
             <div className="flex items-center gap-2 bg-blue-50 rounded-lg px-4 py-2.5 text-[#003087]">
               <Clock className="w-4 h-4 shrink-0" />
               <span className="text-sm font-medium">
-                현재 남아있는 예약 시간: {remainingHours === null ? '확인 중...' : `${remainingHours}시간 / ${RESERVATION_HOURS_LIMIT}시간`}
+                {hours === null
+                  ? '이용 현황 확인 중...'
+                  : `현재 남아있는 예약 ${hours.remaining}시간 / ${RESERVATION_HOURS_LIMIT}시간 · 이번 달 이용 ${hours.monthly}시간 / ${RESERVATION_HOURS_LIMIT}시간`}
               </span>
             </div>
 
