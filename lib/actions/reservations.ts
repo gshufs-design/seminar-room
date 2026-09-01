@@ -159,11 +159,14 @@ export async function createReservation(formData: {
   // 월/기간 구분 없이, "현재 시각 기준으로 아직 끝나지 않은" pending/approved 예약 시간만 합산한다.
   // 예약이 끝나거나 취소되면 그만큼 자동으로 다시 여유가 생긴다.
   const usedHours = await getRemainingReservationHours(supabase, { student_id, phone })
+  // "남아있는 예약 시간"(이미 잡아둔 시간)과 별개로, "추가로 신청 가능한 시간"을 명확히 구분해서 안내한다.
+  // (기존 문구는 "9시간까지 남았다"처럼 읽혀서 "한 번에 9시간까지 예약 가능"으로 오해될 수 있었음)
+  const remainingCapacity = Math.max(0, RESERVATION_HOURS_LIMIT - usedHours)
 
-  if (usedHours + duration > RESERVATION_HOURS_LIMIT) {
+  if (duration > remainingCapacity) {
     return {
       success: false,
-      error: `현재 ${usedHours}시간의 예약이 남아 있습니다. 보유 가능한 예약 시간은 최대 ${RESERVATION_HOURS_LIMIT}시간까지입니다.`,
+      error: `현재 ${usedHours}시간이 예약되어 있어, 추가로 ${remainingCapacity}시간까지만 신청 가능합니다. (1인당 보유 가능 최대 시간: ${RESERVATION_HOURS_LIMIT}시간)`,
     }
   }
 
