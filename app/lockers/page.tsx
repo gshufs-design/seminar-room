@@ -11,23 +11,18 @@ import type { LockerStatusEntry, LockerSettings } from '@/types'
 import { Info, CalendarDays, ArrowLeft, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
 
-const DEFAULT_SETTINGS: LockerSettings = {
-  applications_open: false,
-  clearing_period_days: 7,
-  notice_text: null,
-  agreement_text: null,
-}
-
 export default function LockersPage() {
   const [statuses, setStatuses] = useState<LockerStatusEntry[]>([])
-  const [settings, setSettings] = useState<LockerSettings>(DEFAULT_SETTINGS)
-  const [loading, setLoading] = useState(true)
+  // 설정을 받기 전에는 null로 둡니다. 기본값(applications_open: false)으로 시작하면
+  // 신청 기간인데도 "신청 기간이 아닙니다" 안내가 잠깐 떴다가 바뀌어 혼동을 줍니다.
+  const [settings, setSettings] = useState<LockerSettings | null>(null)
+  const [statusesLoading, setStatusesLoading] = useState(true)
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null)
 
   const loadStatuses = useCallback(async () => {
     const data = await getLockerStatuses()
     setStatuses(data)
-    setLoading(false)
+    setStatusesLoading(false)
   }, [])
 
   useEffect(() => {
@@ -35,6 +30,7 @@ export default function LockersPage() {
     getLockerSettings().then(setSettings)
   }, [loadStatuses])
 
+  const loading = statusesLoading || !settings
   const selectedZone = LOCKER_ZONES.find((z) => z.id === selectedZoneId) ?? null
 
   return (
@@ -50,7 +46,7 @@ export default function LockersPage() {
           </p>
         </div>
 
-        {!settings.applications_open ? (
+        {!settings ? null : !settings.applications_open ? (
           <div className="flex items-start gap-2 bg-orange-50 border border-orange-200 rounded-lg p-4 mb-6 text-sm text-orange-800">
             <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
             <div className="space-y-0.5">
@@ -95,11 +91,11 @@ export default function LockersPage() {
           </div>
         ) : selectedZoneId === 'lobby' ? (
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 sm:p-6">
-            <LockerLobbyScene statuses={statuses} onRefresh={loadStatuses} isAdmin={false} applicationsOpen={settings.applications_open} />
+            <LockerLobbyScene statuses={statuses} onRefresh={loadStatuses} isAdmin={false} applicationsOpen={settings?.applications_open ?? false} />
           </div>
         ) : selectedZoneId === 'reading' ? (
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 sm:p-6">
-            <LockerReadingScene statuses={statuses} onRefresh={loadStatuses} isAdmin={false} applicationsOpen={settings.applications_open} />
+            <LockerReadingScene statuses={statuses} onRefresh={loadStatuses} isAdmin={false} applicationsOpen={settings?.applications_open ?? false} />
           </div>
         ) : (
           <LockerFloorMap statuses={statuses} onSelectZone={setSelectedZoneId} isAdmin={false} />
