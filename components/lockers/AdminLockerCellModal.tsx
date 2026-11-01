@@ -60,6 +60,12 @@ export default function AdminLockerCellModal({ request, onClose, onChanged }: Ad
           <Row label="이메일" value={request.email} />
           <Row label="신청 학기" value={TERM_LABELS[request.term] ?? request.term} />
           <Row label="이용 마감일" value={requestTermEndDate(request.term, request.created_at)} />
+          {request.approved_at && (
+            <Row
+              label="승인일"
+              value={new Date(request.approved_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', dateStyle: 'medium', timeStyle: 'short' })}
+            />
+          )}
         </dl>
 
         {request.status === 'pending' ? (
