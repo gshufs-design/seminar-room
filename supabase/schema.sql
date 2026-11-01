@@ -81,6 +81,8 @@ CREATE TABLE IF NOT EXISTS room_settings (
 
 -- 기존 테이블에 컬럼 추가 (이미 생성된 경우)
 ALTER TABLE room_settings ADD COLUMN IF NOT EXISTS notification_email VARCHAR(255);
+-- 관리자 승인 일시 (supabase/approved-at-migration.sql 참고)
+ALTER TABLE reservations ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
 ALTER TABLE room_settings ADD COLUMN IF NOT EXISTS notice_text TEXT;
 -- 경고 2회 이상 누적으로 이용 제한된 이용자에게 보여줄 안내 문구 (관리자가 직접 입력/수정)
 ALTER TABLE room_settings ADD COLUMN IF NOT EXISTS warning_notice_text TEXT;
@@ -184,6 +186,8 @@ CREATE TABLE IF NOT EXISTS locker_requests (
 );
 
 ALTER TABLE locker_requests ADD COLUMN IF NOT EXISTS agreement_text_snapshot TEXT;
+-- 관리자 승인 일시 (supabase/approved-at-migration.sql 참고)
+ALTER TABLE locker_requests ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
 
 CREATE INDEX idx_locker_requests_locker ON locker_requests (zone_id, block_id, locker_number);
 CREATE INDEX idx_locker_requests_status ON locker_requests (status);
