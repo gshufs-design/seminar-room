@@ -21,6 +21,7 @@ export interface Reservation {
   admin_memo: string | null
   purpose: string
   co_users: CoUser[] | null
+  approved_at: string | null // 관리자가 승인한 일시 (승인 전이거나 이 기능 추가 전에 승인된 건은 null)
   created_at: string
   updated_at: string
 }
@@ -120,6 +121,7 @@ export interface LockerRequest {
   status: LockerRequestStatus
   admin_memo: string | null
   agreement_text_snapshot: string | null
+  approved_at: string | null // 관리자가 승인한 일시 (승인 전이거나 이 기능 추가 전에 승인된 건은 null)
   created_at: string
   updated_at: string
 }
