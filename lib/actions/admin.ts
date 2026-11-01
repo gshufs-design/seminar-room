@@ -82,15 +82,25 @@ export async function updateReservationStatus(
   if (!session) return { success: false, error: '권한이 없습니다.' }
 
   const supabase = createAdminClient()
+  const now = new Date().toISOString()
+  const baseUpdate = {
+    status,
+    admin_memo: admin_memo ?? null,
+    updated_at: now,
+  }
 
-  const { error } = await supabase
+  // 승인할 때는 승인 일시(approved_at)도 함께 기록합니다.
+  let { error } = await supabase
     .from('reservations')
-    .update({
-      status,
-      admin_memo: admin_memo ?? null,
-      updated_at: new Date().toISOString(),
-    })
+    .update(status === 'approved' ? { ...baseUpdate, approved_at: now } : baseUpdate)
     .eq('id', reservationId)
+
+  // DB에 approved_at 컬럼이 아직 없으면(마이그레이션 SQL 실행 전) 승인 자체가 막히지 않도록
+  // 승인 일시 없이 한 번 더 시도합니다.
+  if (error && status === 'approved' && isMissingColumnError(error)) {
+    console.warn('approved_at 컬럼이 없습니다. supabase/approved-at-migration.sql을 실행하세요.')
+    ;({ error } = await supabase.from('reservations').update(baseUpdate).eq('id', reservationId))
+  }
 
   if (error) {
     return { success: false, error: '처리 중 오류가 발생했습니다.' }
@@ -276,4 +286,9 @@ export async function getUserRemainingHours(student_id: string, phone: string): 
     getMonthlyReservationHours(supabase, { student_id, phone }, kstNow.getUTCFullYear(), kstNow.getUTCMonth() + 1),
   ])
   return { remaining, monthly }
+}
+
+// approved_at 컬럼이 아직 DB에 없을 때 Supabase가 돌려주는 오류인지 확인
+function isMissingColumnError(error: { code?: string; message?: string }): boolean {
+  return error.code === 'PGRST204' || error.code === '42703' || /approved_at/.test(error.message ?? '')
 }
