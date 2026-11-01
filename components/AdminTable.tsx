@@ -148,13 +148,14 @@ export default function AdminTable({ reservations, onRefresh }: AdminTableProps)
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">연락처</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">인원</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">상태</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">승인일</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">처리</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-gray-400">예약 내역이 없습니다.</td>
+                  <td colSpan={9} className="px-4 py-10 text-center text-gray-400">예약 내역이 없습니다.</td>
                 </tr>
               ) : (
                 filtered.map((r) => (
@@ -181,6 +182,16 @@ export default function AdminTable({ reservations, onRefresh }: AdminTableProps)
                         <div className="text-xs text-gray-400 mt-1 max-w-[120px] mx-auto truncate" title={r.admin_memo}>
                           {r.admin_memo}
                         </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-center text-gray-600 whitespace-nowrap">
+                      {r.approved_at ? (
+                        <>
+                          <div>{formatDate(r.approved_at, 'yyyy-MM-dd')}</div>
+                          <div className="text-xs text-gray-400">{formatDate(r.approved_at, 'HH:mm')}</div>
+                        </>
+                      ) : (
+                        <span className="text-gray-300">-</span>
                       )}
                     </td>
                     <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>

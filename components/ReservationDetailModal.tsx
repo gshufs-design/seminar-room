@@ -73,6 +73,9 @@ export default function ReservationDetailModal({ reservation, open, onClose }: R
                 </div>
                 <div className="flex gap-2"><span className="text-gray-500 w-16 shrink-0">사용 인원</span><span className="text-gray-800">{r.participant_count}명</span></div>
                 <div className="flex items-center gap-2"><span className="text-gray-500 w-16 shrink-0">상태</span><Badge status={r.status} size="sm" /></div>
+                {r.approved_at && (
+                  <div className="flex gap-2"><span className="text-gray-500 w-16 shrink-0">승인일</span><span className="text-gray-800">{formatDate(r.approved_at, 'yyyy년 MM월 dd일 HH:mm')}</span></div>
+                )}
               </div>
             </div>
 
