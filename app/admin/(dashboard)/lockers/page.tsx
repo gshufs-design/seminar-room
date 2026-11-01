@@ -36,8 +36,16 @@ function ddayLabel(daysLeft: number): string {
   return '마감'
 }
 
+// 승인일시를 한국 시간 기준 "2026-11-01" / "21:52" 형태로 표시
+function formatKstDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' })
+}
+function formatKstTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', hour12: false })
+}
+
 function toCsv(rows: LockerRequest[]): string {
-  const header = ['위치', '블록', '번호', '학과', '이름', '학번(사번)', '연락처', '이메일', '신청학기', '이용마감일', '상태', '신청일시']
+  const header = ['위치', '블록', '번호', '학과', '이름', '학번(사번)', '연락처', '이메일', '신청학기', '이용마감일', '상태', '신청일시', '승인일시']
   const lines = rows.map((r) => {
     const endDate = requestTermEndDate(r.term, r.created_at)
     const values = [
@@ -53,6 +61,7 @@ function toCsv(rows: LockerRequest[]): string {
       endDate,
       STATUS_LABEL[r.status],
       new Date(r.created_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }),
+      r.approved_at ? new Date(r.approved_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) : '',
     ]
     return values.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')
   })
@@ -319,6 +328,7 @@ export default function AdminLockersPage() {
                     <th className="text-left px-4 py-3 font-medium">연락처</th>
                     <th className="text-left px-4 py-3 font-medium">학기</th>
                     <th className="text-left px-4 py-3 font-medium">상태</th>
+                    <th className="text-left px-4 py-3 font-medium">승인일</th>
                     {filter === 'expired' ? (
                       <th className="text-left px-4 py-3 font-medium">만료 학기</th>
                     ) : (
@@ -364,6 +374,16 @@ export default function AdminLockersPage() {
                           <span className={`inline-flex items-center rounded-full font-medium text-xs px-2.5 py-0.5 ${STATUS_STYLE[display]}`}>
                             {STATUS_LABEL[display]}
                           </span>
+                        </td>
+                        <td className="px-4 py-3 align-top text-gray-700 whitespace-nowrap">
+                          {r.approved_at ? (
+                            <>
+                              <p>{formatKstDate(r.approved_at)}</p>
+                              <p className="text-xs text-gray-500">{formatKstTime(r.approved_at)}</p>
+                            </>
+                          ) : (
+                            <span className="text-gray-300">-</span>
+                          )}
                         </td>
                         {filter === 'expired' ? (
                           <td className="px-4 py-3 align-top text-gray-700">{termEndLabel(endDate)}</td>
