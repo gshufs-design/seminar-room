@@ -4,8 +4,19 @@ import { useState } from 'react'
 import Input from './ui/Input'
 import Button from './ui/Button'
 import Modal from './ui/Modal'
-import { getUserLockerRequests, cancelLockerRequest, getLockerSettings } from '@/lib/actions/lockers'
-import { TERM_LABELS, computeDisplayStatus, requestTermEndDate, addDaysISO, diffDaysISO, todayISOKst } from '@/lib/lockers/data'
+import { getUserLockerRequests, cancelLockerRequest, getLockerSettings, requestLockerExtension, cancelLockerExtension } from '@/lib/actions/lockers'
+import {
+  TERM_LABELS,
+  computeDisplayStatus,
+  requestTermEndDate,
+  addDaysISO,
+  diffDaysISO,
+  todayISOKst,
+  canRequestExtension,
+  computeExtendedEndDate,
+  originalTermEndDate,
+  extensionWindowStart,
+} from '@/lib/lockers/data'
 import type { LockerRequest, LockerRequestStatus, LockerSettings } from '@/types'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 
@@ -18,6 +29,7 @@ const STATUS_STYLE: Record<DisplayStatus, string> = {
   expired: 'bg-gray-100 text-gray-600 border border-gray-300',
   rejected: 'bg-red-100 text-red-700 border border-red-300',
   cancelled: 'bg-gray-100 text-gray-600 border border-gray-300',
+  admin_cancelled: 'bg-gray-100 text-gray-600 border border-gray-300',
 }
 const STATUS_LABEL: Record<DisplayStatus, string> = {
   pending: '대기중',
@@ -26,6 +38,7 @@ const STATUS_LABEL: Record<DisplayStatus, string> = {
   expired: '이용 만료',
   rejected: '거절됨',
   cancelled: '취소됨',
+  admin_cancelled: '관리자 취소',
 }
 
 /** D-day 뱃지 문구 ("D-14" / "D-day" / 이미 지났으면 "마감") */
@@ -59,6 +72,28 @@ export default function MyLockerRequests() {
     request: null,
   })
   const [cancelLoading, setCancelLoading] = useState(false)
+
+  // 연장 신청 / 연장 신청 취소 확인 창
+  const [extensionModal, setExtensionModal] = useState<{ request: LockerRequest | null; mode: 'request' | 'cancel' }>({
+    request: null,
+    mode: 'request',
+  })
+  const [extensionLoading, setExtensionLoading] = useState(false)
+
+  const handleExtensionConfirm = async () => {
+    const r = extensionModal.request
+    if (!r) return
+    setExtensionLoading(true)
+    const fn = extensionModal.mode === 'request' ? requestLockerExtension : cancelLockerExtension
+    const result = await fn(r.id, studentId.trim(), phone.replace(/-/g, ''))
+    setExtensionLoading(false)
+    if (result.success) {
+      setExtensionModal({ request: null, mode: 'request' })
+      await handleSearch()
+    } else {
+      alert(result.error ?? '처리에 실패했습니다.')
+    }
+  }
 
   const handleSearch = async () => {
     setError('')
@@ -130,9 +165,17 @@ export default function MyLockerRequests() {
               <p className="text-sm text-gray-500">총 {requests.length}건의 신청 내역</p>
               {requests.map((r) => {
                 const clearingDays = settings?.clearing_period_days ?? 0
-                const display: DisplayStatus = settings ? computeDisplayStatus(r.status, r.term, r.created_at, clearingDays) : r.status
-                const endDate = requestTermEndDate(r.term, r.created_at)
+                const display: DisplayStatus = settings
+                  ? computeDisplayStatus(r.status, r.term, r.created_at, clearingDays, r.extended_end_date, r.extension_status)
+                  : r.status
+                const endDate = requestTermEndDate(r.term, r.created_at, r.extended_end_date)
                 const today = todayISOKst()
+                const canExtend = canRequestExtension(r, today)
+                // 아직 연장 신청 기간 전인 이용 중 건에는 "언제부터 연장 신청 가능"을 안내
+                const extensionOpensOn =
+                  r.status === 'approved' && !r.extension_status && today < extensionWindowStart(r.term, r.created_at)
+                    ? extensionWindowStart(r.term, r.created_at)
+                    : null
 
                 let ddayText: string | null = null
                 if (display === 'pending' || display === 'approved') {
@@ -172,6 +215,25 @@ export default function MyLockerRequests() {
                             📌 마감일({endDate}) 전까지 사물함 안의 모든 짐을 회수해 주세요.
                           </div>
                         )}
+                        {r.status === 'approved' && r.extension_status === 'pending' && (
+                          <div className="text-sm text-yellow-800 bg-yellow-50 border border-yellow-200 rounded px-3 py-1.5 mt-2">
+                            ⏳ 연장 신청이 접수되어 관리자 확인을 기다리고 있습니다. 승인되면 이용 마감일이{' '}
+                            {computeExtendedEndDate(r.term, r.created_at)}로 바뀝니다.
+                          </div>
+                        )}
+                        {r.extension_status === 'approved' && (
+                          <div className="text-sm text-green-800 bg-green-50 border border-green-200 rounded px-3 py-1.5 mt-2">
+                            ✅ 한 학기 연장이 승인되었습니다. (원래 마감일 {originalTermEndDate(r.term, r.created_at)} → {endDate})
+                            <br />
+                            <span className="text-xs">연장은 1회만 가능하며, 이후에도 사용하려면 이용 기간이 끝난 뒤 다시 신규 신청해 주세요.</span>
+                          </div>
+                        )}
+                        {r.status === 'approved' && r.extension_status === 'rejected' && (
+                          <div className="text-sm text-red-700 bg-red-50 rounded px-3 py-1.5 mt-2">연장 신청이 승인되지 않았습니다.</div>
+                        )}
+                        {extensionOpensOn && (
+                          <div className="text-xs text-gray-500 mt-1">연장 신청은 {extensionOpensOn}부터 마감일 당일까지 할 수 있습니다.</div>
+                        )}
                         {display === 'clearing' && (
                           <div className="text-sm text-orange-700 bg-orange-50 rounded px-3 py-1.5 mt-2">
                             이용 마감일이 지났습니다. 빠른 시일 내에 사물함을 비워 주시기 바랍니다.
@@ -180,6 +242,17 @@ export default function MyLockerRequests() {
                         {display === 'expired' && (
                           <div className="text-sm text-gray-600 bg-gray-50 rounded px-3 py-1.5 mt-2">
                             이용 기간이 끝나서 이 사물함은 반납 처리되었습니다.
+                          </div>
+                        )}
+                        {r.status === 'admin_cancelled' && (
+                          <div className="text-sm text-gray-700 bg-gray-50 rounded px-3 py-1.5 mt-2">
+                            관리자가 이 사물함 이용을 취소했습니다.
+                            {r.admin_memo && (
+                              <>
+                                {' '}
+                                <span className="font-medium">사유:</span> {r.admin_memo}
+                              </>
+                            )}
                           </div>
                         )}
                         {r.status === 'rejected' && r.admin_memo && (
@@ -205,6 +278,16 @@ export default function MyLockerRequests() {
 
                       {(r.status === 'pending' || r.status === 'approved') && (
                         <div className="flex flex-row sm:flex-col gap-2 items-start sm:items-end">
+                          {canExtend && (
+                            <Button size="sm" onClick={() => setExtensionModal({ request: r, mode: 'request' })}>
+                              연장 신청
+                            </Button>
+                          )}
+                          {r.status === 'approved' && r.extension_status === 'pending' && (
+                            <Button size="sm" variant="outline" onClick={() => setExtensionModal({ request: r, mode: 'cancel' })}>
+                              연장 신청 취소
+                            </Button>
+                          )}
                           <Button
                             size="sm"
                             variant="danger"
@@ -222,6 +305,57 @@ export default function MyLockerRequests() {
           )}
         </>
       )}
+
+      {/* Extension confirm modal */}
+      <Modal
+        isOpen={!!extensionModal.request}
+        onClose={() => setExtensionModal({ request: null, mode: 'request' })}
+        title={extensionModal.mode === 'request' ? '사물함 연장 신청' : '연장 신청 취소'}
+        size="sm"
+      >
+        {extensionModal.request && (
+          <div>
+            {extensionModal.mode === 'request' ? (
+              <>
+                <p className="text-sm text-gray-700 mb-4">아래 사물함을 한 학기 연장 신청하시겠습니까?</p>
+                <div className="bg-gray-50 rounded p-4 text-sm space-y-1 mb-4">
+                  <div>
+                    <span className="text-gray-500">사물함:</span> {extensionModal.request.zone_label} ·{' '}
+                    {extensionModal.request.block_label} · {extensionModal.request.locker_number}번
+                  </div>
+                  <div>
+                    <span className="text-gray-500">현재 마감일:</span>{' '}
+                    {originalTermEndDate(extensionModal.request.term, extensionModal.request.created_at)}
+                  </div>
+                  <div>
+                    <span className="text-gray-500">연장 후 마감일:</span>{' '}
+                    <span className="font-semibold text-[#003087]">
+                      {computeExtendedEndDate(extensionModal.request.term, extensionModal.request.created_at)}
+                    </span>
+                  </div>
+                </div>
+                <ul className="text-xs text-gray-500 space-y-1 mb-6 list-disc pl-4">
+                  <li>연장은 1회만 가능하며, 관리자 승인 후 확정됩니다.</li>
+                  <li>연장 기간이 끝난 뒤 계속 사용하려면 다른 신청자와 똑같이 다시 신규 신청해야 합니다.</li>
+                  <li>졸업 등으로 이용 자격이 없어지면 관리자가 이용을 취소할 수 있습니다.</li>
+                </ul>
+              </>
+            ) : (
+              <p className="text-sm text-gray-700 mb-6">
+                연장 신청을 취소하시겠습니까? 연장 신청 기간 안이라면 다시 신청할 수 있습니다.
+              </p>
+            )}
+            <div className="flex gap-3">
+              <Button variant="outline" onClick={() => setExtensionModal({ request: null, mode: 'request' })} className="flex-1">
+                돌아가기
+              </Button>
+              <Button onClick={handleExtensionConfirm} loading={extensionLoading} className="flex-1">
+                {extensionModal.mode === 'request' ? '연장 신청' : '연장 신청 취소'}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* Cancel confirm modal */}
       <Modal
