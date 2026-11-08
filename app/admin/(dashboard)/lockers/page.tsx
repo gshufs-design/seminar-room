@@ -1,15 +1,22 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { getAllLockerRequests, updateLockerRequestStatus, deleteLockerRequest, getLockerSettings } from '@/lib/actions/lockers'
-import { TERM_LABELS, formatPhone, requestTermEndDate, todayISOKst, computeDisplayStatus, diffDaysISO, addDaysISO, termEndLabel } from '@/lib/lockers/data'
+import {
+  getAllLockerRequests,
+  updateLockerRequestStatus,
+  deleteLockerRequest,
+  getLockerSettings,
+  updateLockerExtension,
+  adminCancelLockerRequest,
+} from '@/lib/actions/lockers'
+import { TERM_LABELS, formatPhone, requestTermEndDate, originalTermEndDate, computeExtendedEndDate, todayISOKst, computeDisplayStatus, diffDaysISO, addDaysISO, termEndLabel } from '@/lib/lockers/data'
 import type { LockerRequest, LockerRequestStatus, LockerSettings } from '@/types'
-import { Check, X, RotateCcw, ClipboardList, MapPin, Settings, Search, Download, Trash2 } from 'lucide-react'
+import { Check, X, RotateCcw, ClipboardList, MapPin, Settings, Search, Download, Trash2, Ban, CalendarPlus } from 'lucide-react'
 import AdminLockerLayoutEditor from '@/components/lockers/AdminLockerLayoutEditor'
 import AdminLockerSettingsPanel from '@/components/lockers/AdminLockerSettingsPanel'
 
 type DisplayStatus = LockerRequestStatus | 'clearing'
-type Filter = LockerRequestStatus | 'all' | 'urgent'
+type Filter = LockerRequestStatus | 'all' | 'urgent' | 'extension'
 type PageView = 'requests' | 'layout' | 'settings'
 
 const STATUS_STYLE: Record<DisplayStatus, string> = {
@@ -19,6 +26,7 @@ const STATUS_STYLE: Record<DisplayStatus, string> = {
   rejected: 'bg-red-100 text-red-700 border border-red-300',
   cancelled: 'bg-gray-100 text-gray-600 border border-gray-300',
   expired: 'bg-orange-100 text-orange-700 border border-orange-300',
+  admin_cancelled: 'bg-gray-100 text-gray-600 border border-gray-300',
 }
 const STATUS_LABEL: Record<DisplayStatus, string> = {
   pending: '대기중',
@@ -27,6 +35,23 @@ const STATUS_LABEL: Record<DisplayStatus, string> = {
   rejected: '거절됨',
   cancelled: '본인 취소',
   expired: '이용 만료',
+  admin_cancelled: '관리자 취소',
+}
+
+const EXTENSION_LABEL: Record<string, string> = {
+  pending: '연장 신청',
+  approved: '연장됨',
+  rejected: '연장 거절',
+}
+const EXTENSION_STYLE: Record<string, string> = {
+  pending: 'bg-yellow-100 text-yellow-800 border border-yellow-300',
+  approved: 'bg-green-100 text-green-800 border border-green-300',
+  rejected: 'bg-red-50 text-red-600 border border-red-200',
+}
+
+/** 연장이 반영된 실제 이용 마감일 */
+function endDateOf(r: LockerRequest): string {
+  return requestTermEndDate(r.term, r.created_at, r.extended_end_date)
 }
 
 /** D-day 뱃지 문구 ("D-14" / "D-day" / 이미 지났으면 "마감") */
@@ -45,9 +70,9 @@ function formatKstTime(iso: string): string {
 }
 
 function toCsv(rows: LockerRequest[]): string {
-  const header = ['위치', '블록', '번호', '학과', '이름', '학번(사번)', '연락처', '이메일', '신청학기', '이용마감일', '상태', '신청일시', '승인일시']
+  const header = ['위치', '블록', '번호', '학과', '이름', '학번(사번)', '연락처', '이메일', '신청학기', '이용마감일', '상태', '신청일시', '승인일시', '연장 상태', '연장 신청일시', '연장 승인일시']
   const lines = rows.map((r) => {
-    const endDate = requestTermEndDate(r.term, r.created_at)
+    const endDate = endDateOf(r)
     const values = [
       r.zone_label,
       r.block_label,
@@ -62,6 +87,9 @@ function toCsv(rows: LockerRequest[]): string {
       STATUS_LABEL[r.status],
       new Date(r.created_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }),
       r.approved_at ? new Date(r.approved_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) : '',
+      r.extension_status ? EXTENSION_LABEL[r.extension_status] : '',
+      r.extension_requested_at ? new Date(r.extension_requested_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) : '',
+      r.extension_approved_at ? new Date(r.extension_approved_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) : '',
     ]
     return values.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')
   })
@@ -93,13 +121,54 @@ export default function AdminLockersPage() {
   const clearingDays = settings?.clearing_period_days ?? 7
 
   const displayStatusOf = useCallback(
-    (r: LockerRequest): DisplayStatus => computeDisplayStatus(r.status, r.term, r.created_at, clearingDays),
+    (r: LockerRequest): DisplayStatus =>
+      computeDisplayStatus(r.status, r.term, r.created_at, clearingDays, r.extended_end_date, r.extension_status),
     [clearingDays]
   )
 
   const handleUpdate = async (id: string, status: LockerRequestStatus) => {
     setBusyId(id)
     const result = await updateLockerRequestStatus(id, status)
+    if (!result.success) {
+      alert(result.error ?? '처리 중 오류가 발생했습니다.')
+    } else {
+      await load()
+    }
+    setBusyId(null)
+  }
+
+  const handleExtension = async (r: LockerRequest, action: 'approve' | 'reject' | 'revert') => {
+    if (action === 'approve') {
+      const ok = window.confirm(
+        `${r.name}님의 연장 신청을 승인하시겠습니까?\n이용 마감일: ${originalTermEndDate(r.term, r.created_at)} → ${computeExtendedEndDate(r.term, r.created_at)}`
+      )
+      if (!ok) return
+    }
+    if (action === 'reject' && !window.confirm(`${r.name}님의 연장 신청을 거절하시겠습니까?\n(연장은 1회만 가능하므로 이용자는 다시 신청할 수 없습니다.)`)) return
+    if (action === 'revert' && !window.confirm('연장 처리를 되돌리시겠습니까?\n원래 마감일로 돌아가고, 이용자는 신청 기간 안에 다시 연장 신청할 수 있습니다.')) return
+    setBusyId(r.id)
+    const result = await updateLockerExtension(r.id, action)
+    if (!result.success) {
+      alert(result.error ?? '처리 중 오류가 발생했습니다.')
+    } else {
+      await load()
+    }
+    setBusyId(null)
+  }
+
+  // 졸업 등으로 이용 자격이 없어진 경우 관리자가 이용을 취소 (사유는 이용자 조회 화면에 표시됨)
+  const handleAdminCancel = async (r: LockerRequest) => {
+    const reason = window.prompt(
+      `${r.name}님의 사물함(${r.zone_label} ${r.locker_number}번) 이용을 취소합니다.\n취소 사유를 입력하세요. (이용자 조회 화면에 표시됩니다)`,
+      '졸업으로 인한 이용 자격 만료'
+    )
+    if (reason === null) return
+    if (!reason.trim()) {
+      alert('취소 사유를 입력해 주세요.')
+      return
+    }
+    setBusyId(r.id)
+    const result = await adminCancelLockerRequest(r.id, reason)
     if (!result.success) {
       alert(result.error ?? '처리 중 오류가 발생했습니다.')
     } else {
@@ -127,9 +196,10 @@ export default function AdminLockersPage() {
     approved: requests.filter((r) => r.status === 'approved').length,
     rejected: requests.filter((r) => r.status === 'rejected').length,
     expired: requests.filter((r) => r.status === 'expired').length,
+    extension: requests.filter((r) => r.status === 'approved' && r.extension_status === 'pending').length,
     urgent: requests.filter((r) => {
       if (displayStatusOf(r) !== 'approved') return false
-      const endDate = requestTermEndDate(r.term, r.created_at)
+      const endDate = endDateOf(r)
       return diffDaysISO(today, endDate) <= 7
     }).length,
   }
@@ -137,7 +207,7 @@ export default function AdminLockersPage() {
   const expiredRequests = useMemo(() => requests.filter((r) => r.status === 'expired'), [requests])
 
   const expiryLabels = useMemo(
-    () => Array.from(new Set(expiredRequests.map((r) => termEndLabel(requestTermEndDate(r.term, r.created_at))))).sort(),
+    () => Array.from(new Set(expiredRequests.map((r) => termEndLabel(endDateOf(r))))).sort(),
     [expiredRequests]
   )
 
@@ -147,12 +217,14 @@ export default function AdminLockersPage() {
       : filter === 'urgent'
       ? requests.filter((r) => {
           if (displayStatusOf(r) !== 'approved') return false
-          const endDate = requestTermEndDate(r.term, r.created_at)
+          const endDate = endDateOf(r)
           return diffDaysISO(today, endDate) <= 7
         })
+      : filter === 'extension'
+      ? requests.filter((r) => r.status === 'approved' && r.extension_status === 'pending')
       : filter === 'expired'
       ? expiredRequests.filter(
-          (r) => expiryFilter === 'all' || termEndLabel(requestTermEndDate(r.term, r.created_at)) === expiryFilter
+          (r) => expiryFilter === 'all' || termEndLabel(endDateOf(r)) === expiryFilter
         )
       : requests.filter((r) => r.status === filter)
 
@@ -170,6 +242,7 @@ export default function AdminLockersPage() {
   const tabs: { id: Filter; label: string }[] = [
     { id: 'pending', label: `대기중 ${counts.pending}` },
     { id: 'approved', label: `승인됨 ${counts.approved}` },
+    { id: 'extension', label: `연장 신청 ${counts.extension}` },
     { id: 'urgent', label: `마감 임박 ${counts.urgent}` },
     { id: 'expired', label: `이용 만료 ${counts.expired}` },
     { id: 'rejected', label: `거절됨 ${counts.rejected}` },
@@ -235,6 +308,9 @@ export default function AdminLockersPage() {
         <>
           {counts.pending > 0 && (
             <p className="text-sm text-yellow-600 font-medium mb-4">⚠ 승인 대기 중인 신청이 {counts.pending}건 있습니다.</p>
+          )}
+          {counts.extension > 0 && (
+            <p className="text-sm text-yellow-600 font-medium mb-4">⚠ 처리 대기 중인 연장 신청이 {counts.extension}건 있습니다.</p>
           )}
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
@@ -339,7 +415,7 @@ export default function AdminLockersPage() {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {filtered.map((r) => {
-                    const endDate = requestTermEndDate(r.term, r.created_at)
+                    const endDate = endDateOf(r)
                     const display = displayStatusOf(r)
                     let ddayText: string | null = null
                     if (display === 'pending' || display === 'approved') {
@@ -369,6 +445,20 @@ export default function AdminLockersPage() {
                         <td className="px-4 py-3 align-top text-gray-700">
                           <p>{TERM_LABELS[r.term] ?? r.term}</p>
                           <p className="text-xs text-gray-500">📅 {endDate}까지</p>
+                          {r.extension_status && (
+                            <span
+                              className={`inline-flex items-center rounded-full font-medium text-[11px] px-2 py-0.5 mt-1 ${EXTENSION_STYLE[r.extension_status]}`}
+                              title={
+                                r.extension_status === 'pending'
+                                  ? `연장 시 ${computeExtendedEndDate(r.term, r.created_at)}까지`
+                                  : r.extension_status === 'approved'
+                                  ? `원래 마감일 ${originalTermEndDate(r.term, r.created_at)}`
+                                  : undefined
+                              }
+                            >
+                              {EXTENSION_LABEL[r.extension_status]}
+                            </span>
+                          )}
                         </td>
                         <td className="px-4 py-3 align-top">
                           <span className={`inline-flex items-center rounded-full font-medium text-xs px-2.5 py-0.5 ${STATUS_STYLE[display]}`}>
@@ -412,6 +502,49 @@ export default function AdminLockersPage() {
                                 </button>
                               </>
                             ) : (
+                              <>
+                              {r.status === 'approved' && r.extension_status === 'pending' && (
+                                <>
+                                  <button
+                                    disabled={busyId === r.id}
+                                    onClick={() => handleExtension(r, 'approve')}
+                                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded text-xs font-medium bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+                                  >
+                                    <CalendarPlus className="w-3.5 h-3.5" />
+                                    연장 승인
+                                  </button>
+                                  <button
+                                    disabled={busyId === r.id}
+                                    onClick={() => handleExtension(r, 'reject')}
+                                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded text-xs font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                    연장 거절
+                                  </button>
+                                </>
+                              )}
+                              {(r.extension_status === 'approved' || r.extension_status === 'rejected') && (
+                                <button
+                                  disabled={busyId === r.id}
+                                  onClick={() => handleExtension(r, 'revert')}
+                                  className="inline-flex items-center gap-1 px-2 py-1.5 rounded text-xs font-medium text-gray-500 hover:text-gray-700 disabled:opacity-50"
+                                  title="연장 처리 되돌리기"
+                                >
+                                  <RotateCcw className="w-3.5 h-3.5" />
+                                  연장 되돌리기
+                                </button>
+                              )}
+                              {r.status === 'approved' && (
+                                <button
+                                  disabled={busyId === r.id}
+                                  onClick={() => handleAdminCancel(r)}
+                                  className="inline-flex items-center gap-1 px-2 py-1.5 rounded text-xs font-medium text-orange-600 hover:bg-orange-50 disabled:opacity-50"
+                                  title="관리자 취소 (예: 졸업생)"
+                                >
+                                  <Ban className="w-3.5 h-3.5" />
+                                  관리자 취소
+                                </button>
+                              )}
                               <button
                                 disabled={busyId === r.id}
                                 onClick={() => handleUpdate(r.id, 'pending')}
@@ -420,6 +553,7 @@ export default function AdminLockersPage() {
                                 <RotateCcw className="w-3.5 h-3.5" />
                                 대기중으로
                               </button>
+                              </>
                             )}
                             <button
                               disabled={busyId === r.id}
