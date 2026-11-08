@@ -103,7 +103,11 @@ export interface WarningGroup {
 // =============================================
 // 사물함 예약 (Lockers)
 // =============================================
-export type LockerRequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelled' | 'expired'
+// admin_cancelled: 관리자 취소 (예: 졸업으로 이용 자격이 없어진 경우)
+export type LockerRequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelled' | 'expired' | 'admin_cancelled'
+
+// 연장 신청 상태 (null = 연장 신청 없음)
+export type LockerExtensionStatus = 'pending' | 'approved' | 'rejected'
 
 export interface LockerRequest {
   id: string
@@ -122,6 +126,11 @@ export interface LockerRequest {
   admin_memo: string | null
   agreement_text_snapshot: string | null
   approved_at: string | null // 관리자가 승인한 일시 (승인 전이거나 이 기능 추가 전에 승인된 건은 null)
+  // ── 연장 (1회, 한 학기) ──
+  extension_status?: LockerExtensionStatus | null
+  extension_requested_at?: string | null // 이용자가 연장을 신청한 일시
+  extension_approved_at?: string | null // 관리자가 연장을 승인한 일시
+  extended_end_date?: string | null // 연장 승인 후의 새 이용 마감일 ('YYYY-MM-DD')
   created_at: string
   updated_at: string
 }
