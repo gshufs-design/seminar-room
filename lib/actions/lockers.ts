@@ -2,7 +2,7 @@
 
 import { createAdminClient } from '@/lib/supabase/server'
 import { getAdminSession } from '@/lib/auth'
-import { getZone, getBlock, computeDisplayStatus, DEFAULT_AGREEMENT_TEXT } from '@/lib/lockers/data'
+import { getZone, getBlock, computeDisplayStatus, DEFAULT_AGREEMENT_TEXT, canRequestExtension, computeExtendedEndDate, todayISOKst } from '@/lib/lockers/data'
 import type { LockerRequest, LockerRequestStatus, LockerStatusEntry, LockerLayoutOverrides, LockerSettings } from '@/types'
 import { revalidatePath } from 'next/cache'
 import { sendNewLockerRequestNotification } from '@/lib/email'
@@ -99,11 +99,16 @@ async function expireStaleApprovedRequests(): Promise<void> {
   const settings = await getLockerSettings()
 
   const supabase = createAdminClient()
-  const { data, error } = await supabase.from('locker_requests').select('id, term, created_at').eq('status', 'approved')
+  // '*'로 조회해야 연장 칸(extended_end_date 등)을 추가하는 SQL을 실행하기 전에도 오류 없이 동작합니다.
+  const { data, error } = await supabase.from('locker_requests').select('*').eq('status', 'approved')
   if (error || !data || data.length === 0) return
 
   const staleIds = data
-    .filter((r) => computeDisplayStatus('approved', r.term, r.created_at, settings.clearing_period_days) === 'expired')
+    .filter(
+      (r) =>
+        computeDisplayStatus('approved', r.term, r.created_at, settings.clearing_period_days, r.extended_end_date, r.extension_status) ===
+        'expired'
+    )
     .map((r) => r.id)
   if (staleIds.length === 0) return
 
@@ -115,7 +120,7 @@ export async function getLockerStatuses(): Promise<LockerStatusEntry[]> {
   await expireStaleApprovedRequests()
   const supabase = createAdminClient()
   const [{ data, error }, settings] = await Promise.all([
-    supabase.from('locker_status_public').select('zone_id, block_id, locker_number, status, term, created_at'),
+    supabase.from('locker_status_public').select('*'),
     getLockerSettings(),
   ])
 
@@ -126,7 +131,14 @@ export async function getLockerStatuses(): Promise<LockerStatusEntry[]> {
 
   const result: LockerStatusEntry[] = []
   for (const row of data ?? []) {
-    const display = computeDisplayStatus(row.status as 'pending' | 'approved', row.term, row.created_at, settings.clearing_period_days)
+    const display = computeDisplayStatus(
+      row.status as 'pending' | 'approved',
+      row.term,
+      row.created_at,
+      settings.clearing_period_days,
+      row.extended_end_date,
+      row.extension_status
+    )
     if (display === 'expired') continue // 비우는 기간까지 지남 → 다시 빈 자리로 취급 (목록에서 제외)
     result.push({ zone_id: row.zone_id, block_id: row.block_id, locker_number: row.locker_number, status: display as LockerStatusEntry['status'] })
   }
@@ -339,6 +351,83 @@ export async function cancelLockerRequest(
   return { success: true }
 }
 
+// ── 연장 신청 (신청자 본인) ──────────────────────────────────────
+// 규칙: 이용 중(승인된) 건만, 원래 마감일 30일 전 ~ 마감일 당일, 1회만, 관리자 승인 필요.
+
+async function findOwnLockerRequest(requestId: string, student_id: string, phone: string) {
+  const supabase = createAdminClient()
+  const { data: request, error } = await supabase
+    .from('locker_requests')
+    .select('*')
+    .eq('id', requestId)
+    .eq('student_id', student_id)
+    .single()
+  if (error || !request || request.phone.replace(/\D/g, '') !== phone.replace(/\D/g, '')) return null
+  return request as LockerRequest
+}
+
+export async function requestLockerExtension(
+  requestId: string,
+  student_id: string,
+  phone: string
+): Promise<{ success: boolean; error?: string }> {
+  const request = await findOwnLockerRequest(requestId, student_id, phone)
+  if (!request) return { success: false, error: '신청 내역을 찾을 수 없습니다.' }
+
+  if (request.extension_status) {
+    return { success: false, error: '연장 신청은 1회만 가능합니다.' }
+  }
+  if (!canRequestExtension(request, todayISOKst())) {
+    return { success: false, error: '지금은 연장 신청 기간이 아닙니다. (이용 마감일 30일 전부터 마감일 당일까지 신청할 수 있습니다.)' }
+  }
+
+  const supabase = createAdminClient()
+  const { error } = await supabase
+    .from('locker_requests')
+    .update({ extension_status: 'pending', extension_requested_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq('id', requestId)
+    .eq('status', 'approved')
+    .is('extension_status', null)
+
+  if (error) {
+    console.error('requestLockerExtension error:', error)
+    return { success: false, error: '연장 신청 중 오류가 발생했습니다.' }
+  }
+
+  revalidatePath('/my-reservations')
+  revalidatePath('/admin/lockers')
+  return { success: true }
+}
+
+/** 관리자가 처리하기 전의 연장 신청을 본인이 취소 (취소하면 기간 안에 다시 신청할 수 있음) */
+export async function cancelLockerExtension(
+  requestId: string,
+  student_id: string,
+  phone: string
+): Promise<{ success: boolean; error?: string }> {
+  const request = await findOwnLockerRequest(requestId, student_id, phone)
+  if (!request) return { success: false, error: '신청 내역을 찾을 수 없습니다.' }
+  if (request.extension_status !== 'pending') {
+    return { success: false, error: '처리 대기 중인 연장 신청만 취소할 수 있습니다.' }
+  }
+
+  const supabase = createAdminClient()
+  const { error } = await supabase
+    .from('locker_requests')
+    .update({ extension_status: null, extension_requested_at: null, updated_at: new Date().toISOString() })
+    .eq('id', requestId)
+    .eq('extension_status', 'pending')
+
+  if (error) {
+    console.error('cancelLockerExtension error:', error)
+    return { success: false, error: '연장 신청 취소 중 오류가 발생했습니다.' }
+  }
+
+  revalidatePath('/my-reservations')
+  revalidatePath('/admin/lockers')
+  return { success: true }
+}
+
 export interface LockerDuplicateException {
   student_id: string
   note: string | null
@@ -478,4 +567,83 @@ export async function updateLockerRequestStatus(
 // approved_at 컬럼이 아직 DB에 없을 때 Supabase가 돌려주는 오류인지 확인
 function isMissingApprovedAtColumn(error: { code?: string; message?: string }): boolean {
   return error.code === 'PGRST204' || error.code === '42703' || /approved_at/.test(error.message ?? '')
+}
+
+// ── 연장 신청 처리 (관리자 전용) ─────────────────────────────────
+// approve: 새 마감일(원래 마감일 다음의 마감일)을 기록하고 승인 일시를 남깁니다.
+// reject : 거절 (연장은 1회만이므로 이용자는 다시 신청할 수 없음)
+// revert : 실수로 처리한 경우 연장을 없던 일로 되돌림 (이용자가 기간 안에 다시 신청 가능)
+export async function updateLockerExtension(
+  requestId: string,
+  action: 'approve' | 'reject' | 'revert'
+): Promise<{ success: boolean; error?: string }> {
+  const session = await getAdminSession()
+  if (!session) return { success: false, error: '권한이 없습니다.' }
+
+  const supabase = createAdminClient()
+  const { data: request, error: fetchError } = await supabase.from('locker_requests').select('*').eq('id', requestId).single()
+  if (fetchError || !request) return { success: false, error: '신청 내역을 찾을 수 없습니다.' }
+
+  const now = new Date().toISOString()
+  let update: Record<string, unknown>
+
+  if (action === 'revert') {
+    update = { extension_status: null, extension_requested_at: null, extension_approved_at: null, extended_end_date: null, updated_at: now }
+  } else {
+    if (request.status !== 'approved') {
+      return { success: false, error: '이용 중(승인된) 사물함의 연장 신청만 처리할 수 있습니다.' }
+    }
+    if (request.extension_status !== 'pending') {
+      return { success: false, error: '처리 대기 중인 연장 신청이 없습니다.' }
+    }
+    update =
+      action === 'approve'
+        ? {
+            extension_status: 'approved',
+            extension_approved_at: now,
+            extended_end_date: computeExtendedEndDate(request.term, request.created_at),
+            updated_at: now,
+          }
+        : { extension_status: 'rejected', updated_at: now }
+  }
+
+  const { error } = await supabase.from('locker_requests').update(update).eq('id', requestId)
+  if (error) {
+    console.error('updateLockerExtension error:', error)
+    return { success: false, error: '처리 중 오류가 발생했습니다.' }
+  }
+
+  revalidatePath('/admin/lockers')
+  revalidatePath('/lockers')
+  revalidatePath('/my-reservations')
+  return { success: true }
+}
+
+// ── 관리자 취소 (예: 졸업으로 이용 자격이 없어진 경우) ─────────────────
+export async function adminCancelLockerRequest(
+  requestId: string,
+  reason: string
+): Promise<{ success: boolean; error?: string }> {
+  const session = await getAdminSession()
+  if (!session) return { success: false, error: '권한이 없습니다.' }
+
+  if (!reason || reason.trim().length === 0) {
+    return { success: false, error: '취소 사유를 입력해 주세요.' }
+  }
+
+  const supabase = createAdminClient()
+  const { error } = await supabase
+    .from('locker_requests')
+    .update({ status: 'admin_cancelled', admin_memo: reason.trim(), updated_at: new Date().toISOString() })
+    .eq('id', requestId)
+
+  if (error) {
+    console.error('adminCancelLockerRequest error:', error)
+    return { success: false, error: '처리 중 오류가 발생했습니다. (DB 변경 SQL을 실행했는지 확인해 주세요.)' }
+  }
+
+  revalidatePath('/admin/lockers')
+  revalidatePath('/lockers')
+  revalidatePath('/my-reservations')
+  return { success: true }
 }
