@@ -179,9 +179,48 @@ export function computeTermEndDate(term: '1' | '2', fromDateISO: string): string
   return term === '1' ? term1End : term2End
 }
 
-/** 신청 시점(created_at)과 신청 학기를 바탕으로, 그 신청 건의 실제 이용 마감일을 계산합니다. */
-export function requestTermEndDate(term: string, createdAt: string): string {
+/**
+ * 그 신청 건의 실제 이용 마감일.
+ * 연장이 승인된 건(extendedEndDate 있음)은 연장된 마감일을, 아니면 신청일·신청 학기로 계산한 원래 마감일을 반환합니다.
+ */
+export function requestTermEndDate(term: string, createdAt: string, extendedEndDate?: string | null): string {
+  if (extendedEndDate) return extendedEndDate
+  return originalTermEndDate(term, createdAt)
+}
+
+/** 연장과 상관없는 "원래" 이용 마감일 (신청일 + 신청 학기로 계산) */
+export function originalTermEndDate(term: string, createdAt: string): string {
   return computeTermEndDate(term === '2' ? '2' : '1', toKstDateISO(createdAt))
+}
+
+// ── 연장 신청 규칙 ──────────────────────────────────────────────
+/** 원래 마감일 며칠 전부터 연장 신청을 받을지 */
+export const EXTENSION_WINDOW_DAYS = 30
+
+/** 연장하면 바뀔 새 마감일 = 원래 마감일 다음의 마감일 (한 학기) */
+export function computeExtendedEndDate(term: string, createdAt: string): string {
+  const originalEnd = originalTermEndDate(term, createdAt)
+  return computeTermEndDate('1', addDaysISO(originalEnd, 1))
+}
+
+/** 연장 신청을 받기 시작하는 날 (원래 마감일 30일 전) */
+export function extensionWindowStart(term: string, createdAt: string): string {
+  return addDaysISO(originalTermEndDate(term, createdAt), -EXTENSION_WINDOW_DAYS)
+}
+
+/**
+ * 지금 이 신청 건으로 연장 신청을 할 수 있는지.
+ * 승인된(이용 중인) 건이고, 연장 신청을 한 적이 없고, 오늘이 "원래 마감일 30일 전 ~ 마감일 당일" 사이일 때만 가능.
+ * (연장은 1회만 — 거절된 경우에도 다시 신청할 수 없습니다.)
+ */
+export function canRequestExtension(
+  r: { status: string; term: string; created_at: string; extension_status?: string | null },
+  todayISO: string
+): boolean {
+  if (r.status !== 'approved') return false
+  if (r.extension_status) return false
+  const end = originalTermEndDate(r.term, r.created_at)
+  return todayISO >= extensionWindowStart(r.term, r.created_at) && todayISO <= end
 }
 
 /** 마감일('YYYY-MM-DD', 3월 또는 9월)을 "2027년 1학기"/"2027년 2학기" 같은 라벨로 */
@@ -200,16 +239,21 @@ export function termEndLabel(endDateISO: string): string {
  * (rawStatus가 'approved'일 때만 날짜 계산이 필요합니다 — 'expired'는 이미 DB에
  *  반영된 사실이라 그대로 통과시킵니다.)
  */
-export function computeDisplayStatus(
-  rawStatus: 'pending' | 'approved' | 'rejected' | 'cancelled' | 'expired',
+export function computeDisplayStatus<S extends string>(
+  rawStatus: S,
   term: string,
   createdAt: string,
-  clearingPeriodDays: number
-): 'pending' | 'approved' | 'rejected' | 'cancelled' | 'expired' | 'clearing' {
+  clearingPeriodDays: number,
+  extendedEndDate?: string | null,
+  extensionStatus?: string | null
+): S | 'approved' | 'expired' | 'clearing' {
   if (rawStatus !== 'approved') return rawStatus
-  const endDate = requestTermEndDate(term, createdAt)
+  const endDate = requestTermEndDate(term, createdAt, extendedEndDate)
   const today = todayISOKst()
   if (today <= endDate) return 'approved'
+  // 마감일 전에 연장을 신청했는데 관리자가 아직 처리하지 않은 경우,
+  // 처리될 때까지는 "이용 중"으로 둡니다 (신청자가 불이익을 받지 않도록).
+  if (extensionStatus === 'pending') return 'approved'
   const clearEnd = addDaysISO(endDate, clearingPeriodDays)
   if (today <= clearEnd) return 'clearing'
   return 'expired'
