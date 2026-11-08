@@ -188,6 +188,8 @@ CREATE TABLE IF NOT EXISTS locker_requests (
 ALTER TABLE locker_requests ADD COLUMN IF NOT EXISTS agreement_text_snapshot TEXT;
 -- 관리자 승인 일시 (supabase/approved-at-migration.sql 참고)
 ALTER TABLE locker_requests ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
+-- 연장 신청(1회, 한 학기)·관리자 취소(admin_cancelled) 관련 칸과 상태값은
+-- supabase/locker-extension-migration.sql 에서 추가합니다 (공개 뷰 locker_status_public 변경 포함).
 
 CREATE INDEX idx_locker_requests_locker ON locker_requests (zone_id, block_id, locker_number);
 CREATE INDEX idx_locker_requests_status ON locker_requests (status);
