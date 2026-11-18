@@ -23,8 +23,7 @@ export default function HomePage() {
       <Header />
       <main className="max-w-4xl mx-auto px-4 py-16">
         <div className="text-center mb-12">
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">한국외국어대학교 일반대학원 총학생회</h1>
-          <p className="text-base text-gray-500 mt-2">예약 시스템</p>
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">공용 세미나실 및 사물함 예약</h1>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
